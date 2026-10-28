@@ -322,24 +322,31 @@
       if (!host) return `<span class="pair-name">${val && player(val) ? avatar(val, "xs") + esc(pName(val)) : "—"}</span>`;
       return `<select data-chg="pair" data-x="${r}-${c}"><option value="">— wybierz —</option>${list.map(p => `<option value="${esc(p.id)}" ${p.id === val ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>`;
     };
+    const rules = [
+      "Kładziesz kartę w tym samym <b>kolorze</b> albo z tą samą <b>liczbą</b>. Każdy kolor to twarz jednego gracza.",
+      `<b>+3</b> – następna osoba dobiera 3 karty i traci turę${v.opts.stack ? " (chyba że przebije własną +3 – kary się sumują)" : ""}.`,
+      "Nie masz co położyć? Dobierz kartę – jeśli pasuje, możesz ją od razu zagrać.",
+      "Przy przedostatniej karcie krzycz <b>UNO!</b> – kto zapomni, może zostać złapany (+2).",
+      "<b>Pary 💞</b> (jeśli włączone): kolor jednej osoby z pary można położyć na kolor drugiej – jedna karta na raz.",
+      "Kto pozbędzie się kart, zajmuje miejsce (🥇, 🥈, 🥉…), a reszta gra dalej – aż zostanie jedna osoba z kartami 👻.",
+    ];
     return `
-    <section class="uno-setup">
-      <div class="setup-hero"><h2 class="spooky">Upiorne <span>UNO</span></h2><p>Twoja twarz · Twój kolor · Twoje karty</p></div>
+    <section class="uno-setup fit-screen"><div class="fit-inner">
+      <div class="setup-head"><h2 class="spooky">Upiorne <span>UNO</span></h2>${rulesButton()}</div>
 
-      <div class="glass step">
-        <h3><span class="stepnum">1</span> Twoje zdjęcie</h3>
-        <div class="photo-row">
+      <div class="glass">
+        <div class="me-row">
           ${avatar(me(), "xl")}
           <div class="photo-btns">
-            <label class="btn orange small"><input type="file" accept="image/*" capture="user" data-photo hidden>📸 Zrób selfie</label>
-            <label class="btn ghost small"><input type="file" accept="image/*" data-photo hidden>🖼️ Z galerii</label>
+            <label class="btn orange small"><input type="file" accept="image/*" capture="user" data-photo hidden>📸 Selfie</label>
+            <label class="btn ghost small"><input type="file" accept="image/*" data-photo hidden>🖼️ Galeria</label>
           </div>
+          ${mine != null ? cardHTML({ k: mine, v: 7 }) : ""}
         </div>
-        <p class="hint">Twarz trafi na wszystkie karty w Twoim kolorze 👀</p>
       </div>
 
-      <div class="glass step">
-        <h3><span class="stepnum">2</span> Twój kolor</h3>
+      <div class="glass">
+        <h3>Twój kolor ${mine == null ? '<span class="tag">dotknij, żeby zająć</span>' : ""}</h3>
         <div class="swatches">
           ${COLORS.map((col, k) => {
             const owner = ownerOf(v, k);
@@ -348,39 +355,23 @@
               ${owner ? avatar(owner, "sm") : `<span class="sw-emoji">${col.emoji}</span>`}<small>${owner ? esc(pName(owner)) : col.name}</small></button>`;
           }).join("")}
         </div>
-        ${mine != null ? `<div class="preview-cards">${cardHTML({ k: mine, v: 7 }, "tilt-l")}${cardHTML({ k: mine, v: P3 }, "tilt-r")}</div>` : `<p class="hint">Dotknij koloru, żeby go zająć.</p>`}
       </div>
 
-      <div class="glass">
-        <h3>Gotowi <span class="count">${ready.length}/${list.length}</span></h3>
-        <ul class="plist compact">
-          ${list.map(p => `<li class="${p.online ? "" : "off"}">${avatar(p.id, "sm")}<span class="pn">${esc(p.name)}</span>
-            ${v.colors[p.id] != null ? `<span class="dot" style="${swatchStyle(v.colors[p.id])}"></span>` : '<span class="tag dim">wybiera…</span>'}
-            ${S.photos[p.id] ? "" : '<span class="tag dim">bez zdjęcia</span>'}</li>`).join("")}
-        </ul>
-      </div>
-
-      <div class="glass settings">
-        <h3>Zasady ${host ? "" : '<span class="tag dim">ustawia host</span>'}</h3>
+      <div class="glass settings compact">
+        <div class="ready-row">
+          ${list.map(p => `<span class="rp ${v.colors[p.id] != null ? "" : "wait"}" title="${esc(p.name)}">${avatar(p.id, "sm")}${v.colors[p.id] != null ? `<i class="dot" style="${swatchStyle(v.colors[p.id])}"></i>` : ""}</span>`).join("")}
+          <span class="lbl">Gotowi ${ready.length}/${list.length}</span>
+        </div>
         <div class="set-row"><span>Karty na start</span>
           <div class="seg">${[5, 7, 9].map(n => `<button class="${v.opts.hand === n ? "on" : ""}" ${host ? `data-act="opt" data-x="hand" data-y="${n}"` : "disabled"}>${n}</button>`).join("")}</div></div>
-        <div class="set-row"><span>Przebijanie +3 kolejną +3<small>kary się sumują</small></span>${toggle("stack", v.opts.stack, host)}</div>
-        <div class="set-row"><span>Pary 💞<small>kolor osoby z pary można położyć na kolor drugiej – jedna karta na raz</small></span>${toggle("pairs", v.opts.pairs, host)}</div>
+        <div class="set-row"><span>Przebijanie +3</span>${toggle("stack", v.opts.stack, host)}</div>
+        <div class="set-row"><span>Pary 💞</span>${toggle("pairs", v.opts.pairs, host)}</div>
         ${v.opts.pairs ? `<div class="pairs">${[0, 1].map(r => `<div class="pair-row"><b>${r + 1}.</b>${sel(r, 0)}<span class="heart">💞</span>${sel(r, 1)}</div>`).join("")}</div>` : ""}
-        <details class="rules"><summary>Jak się gra?</summary>
-          <ul>
-            <li>Kładziesz kartę w tym samym <b>kolorze</b> albo z tą samą <b>liczbą</b>.</li>
-            <li><b>+3</b> – następna osoba dobiera 3 karty i traci turę${v.opts.stack ? " (chyba że przebije własną +3)" : ""}.</li>
-            <li>Nie masz co położyć? Dobierz kartę – jeśli pasuje, możesz ją od razu zagrać.</li>
-            <li>Przy przedostatniej karcie krzycz <b>UNO!</b> – kto się zapomni, może zostać złapany (+2).</li>
-            <li>Kto pozbędzie się kart, zajmuje miejsce (🥇, 🥈, 🥉…), a reszta gra dalej – aż zostanie jedna osoba z kartami 👻.</li>
-          </ul>
-        </details>
         ${host ? `<button class="btn orange big" data-act="start" ${ready.length < 2 ? "disabled" : ""}>🎃 Rozdaj karty</button>
           ${ready.length < 2 ? '<p class="hint">Potrzeba min. 2 graczy z kolorem.</p>' : ready.length < list.length ? '<p class="hint">Gracze bez koloru tylko oglądają tę rundę.</p>' : ""}`
           : `<p class="hint wait">⏳ Host rozda karty, gdy wszyscy będą gotowi…</p>`}
       </div>
-    </section>`;
+    </div></section>${rulesModal("Jak grać w Upiorne UNO?", rules)}`;
   }
 
   const toggle = (key, on, host) => `<button class="toggle ${on ? "on" : ""}" ${host ? `data-act="opt" data-x="${key}" data-y="${on ? "0" : "1"}"` : "disabled"} aria-pressed="${on}"><i></i></button>`;

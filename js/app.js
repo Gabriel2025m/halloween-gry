@@ -61,6 +61,7 @@ function render() {
   document.body.classList.toggle("fit", !!app.querySelector(".fit-screen"));
   const g = S.screen === "room" && S.view && S.view.phase === "game" ? gameById(S.view.gameId) : null;
   if (g && g.layout) g.layout(app);
+  autoFit(app);
   updatePhotoCSS();
 }
 
@@ -83,8 +84,20 @@ function morph(from, to) {
   while (a.length > b.length) from.removeChild(from.lastChild);
 }
 
+// Ekrany bez przewijania: jeśli zawartość jest wyższa niż okno, całość się proporcjonalnie zmniejsza.
+function autoFit(root) {
+  root.querySelectorAll(".fit-inner").forEach(el => {
+    el.style.zoom = "";
+    const box = el.parentElement;
+    const cs = getComputedStyle(box);
+    const avail = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const need = el.getBoundingClientRect().height;
+    if (need > avail + 1) el.style.zoom = String(Math.max(0.5, Math.floor((avail / need) * 1000) / 1000));
+  });
+}
+
 let resizeTimer = null;
-window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.screen === "room") render(); }, 120); });
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 120); });
 
 function screenHTML() {
   if (S.screen === "connecting") return connectingHTML();
@@ -95,7 +108,7 @@ function screenHTML() {
 function homeHTML() {
   const saved = hostSave();
   return `
-  <section class="home">
+  <section class="home fit-screen"><div class="fit-inner">
     <div class="hero">
       <div class="logo-pumpkin">🎃</div>
       <h1 class="spooky">Upiorna<br><span>Noc Gier</span></h1>
@@ -113,7 +126,7 @@ function homeHTML() {
       ${saved ? `<button class="btn ghost" data-do="restore">↺ Wróć do swojego pokoju <b>${esc(saved.code)}</b></button>` : ""}
     </div>
     <div class="graveyard"><span>🪦</span><span class="flick">🎃</span><span>🕸️</span><span class="flick d2">🎃</span><span>🪦</span></div>
-  </section>`;
+  </div></section>`;
 }
 
 function connectingHTML() {
@@ -149,7 +162,7 @@ function lobbyHTML() {
   const v = S.view;
   const list = players();
   return `
-  <section class="lobby">
+  <section class="lobby fit-screen"><div class="fit-inner">
     <div class="glass code-card">
       <small>Kod pokoju – podaj znajomym</small>
       <div class="code-big">${[...v.code].map((c, i) => `<span style="--i:${i}">${esc(c)}</span>`).join("")}</div>
@@ -157,9 +170,9 @@ function lobbyHTML() {
     </div>
     <div class="glass">
       <h3>Ekipa <span class="count">${list.length}</span></h3>
-      <ul class="plist">
-        ${list.map(p => `<li class="${p.online ? "" : "off"}">${avatar(p.id)}<span class="pn">${esc(p.name)}${p.id === me() ? ' <em>(Ty)</em>' : ""}</span>
-          ${p.id === v.hostId ? '<span class="tag">👑 host</span>' : ""}${p.online ? "" : '<span class="tag dim">offline</span>'}
+      <ul class="pchips">
+        ${list.map(p => `<li class="${p.online ? "" : "off"} ${p.id === me() ? "me" : ""}">${avatar(p.id, "sm")}<span class="pn">${esc(p.name)}</span>
+          ${p.id === v.hostId ? '<span class="crown-s" title="host">👑</span>' : ""}
           ${isHost() && p.id !== me() ? `<button class="kick" data-act="room.kick" data-x="${esc(p.id)}" aria-label="Wyrzuć">✕</button>` : ""}</li>`).join("")}
       </ul>
     </div>
@@ -171,11 +184,20 @@ function lobbyHTML() {
           <div class="gt-info"><b>${esc(g.name)}</b><p>${esc(g.tagline)}</p><small>${g.min}–${g.max} graczy</small></div>
           ${isHost() ? `<button class="btn orange small" data-act="room.game" data-x="${g.id}">Graj</button>` : ""}
         </div>`).join("")}
-        <div class="game-tile soon"><div class="gt-emoji">🕸️</div><div class="gt-info"><b>Kolejne gry…</b><p>Wkrótce wypełzną z grobu</p></div></div>
       </div>
       ${isHost() ? "" : `<p class="hint wait">⏳ Host wybiera grę…</p>`}
     </div>
-  </section>`;
+  </div></section>`;
+}
+
+// Okienko z zasadami (otwierane przyciskiem „📜 Zasady” na ekranach ustawień gier).
+const rulesButton = () => `<button class="btn ghost small rules-btn" data-do="rules">📜 Zasady</button>`;
+function rulesModal(title, items) {
+  if (!S.rules) return "";
+  return `<div class="modal-veil" data-do="rules"><div class="glass modal" data-do="noop">
+    <h3>${title}</h3><ul class="rules-list">${items.map(i => `<li>${i}</li>`).join("")}</ul>
+    <button class="btn orange" data-do="rules">Rozumiem 👍</button>
+  </div></div>`;
 }
 
 // Zdjęcia: jeden blok CSS zamiast powtarzania data-URL w każdej karcie.
@@ -214,6 +236,8 @@ const DO = {
     if (confirm(q)) goHome();
   },
   menu() { S.menu = !S.menu; render(); },
+  rules() { S.rules = !S.rules; render(); },
+  noop() {},
   share() {
     const url = `${location.origin}${location.pathname}?k=${S.view.code}`;
     if (navigator.share) navigator.share({ title: "Upiorna Noc Gier 🎃", text: `Dołącz do pokoju ${S.view.code}!`, url }).catch(() => {});

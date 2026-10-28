@@ -255,40 +255,37 @@
   function setupHTML(v) {
     const host = isHost();
     const list = players();
+    const online = list.filter(p => p.online);
+    const rules = [
+      "🎲 Po kolei rzucacie kostką i idziecie leśną ścieżką do <b>Chatki 🛖</b>.",
+      "🍄 Pole z grzybem: ciągniesz kartę z lasu – <b>Złoty grzyb +5</b>, <b>Prawdziwek +3</b>, <b>Podgrzybek +2</b>, <b>Kurka +1</b>. Uwaga na <b>muchomora</b> – wyrzucasz z koszyka najcenniejszego grzyba!",
+      "🦇 Nietoperz: 3 pola do przodu · 👻 Duch: 3 pola wstecz · 🌫️ Mgła: tracisz kolejkę · 🎃 Dynia: rzucasz jeszcze raz · 🧙 Wiedźma: podkradasz grzyba liderowi.",
+      "🛖 Kto pierwszy w Chatce, dostaje premię +3 (potem +2, +1). Gra trwa, aż wszyscy dojdą – wygrywa najpełniejszy koszyk.",
+    ];
     return `
-    <section class="gm-setup">
-      <div class="setup-hero"><h2 class="spooky">Upiorne <span class="gm-green">Grzybobranie</span></h2><p>Nawiedzony las · kostka · pełny koszyk</p></div>
+    <section class="gm-setup fit-screen"><div class="fit-inner">
+      <div class="setup-head"><h2 class="spooky">Upiorne <span class="gm-green">Grzybobranie</span></h2>${rulesButton()}</div>
       <div class="glass">
-        <h3>Jak się gra?</h3>
-        <ul class="gm-rules">
-          <li>🎲 Po kolei rzucacie kostką i idziecie leśną ścieżką do <b>Chatki 🛖</b>.</li>
-          <li>🍄 Pole z grzybem: ciągniesz kartę z lasu – <b>Złoty grzyb +5</b>, <b>Prawdziwek +3</b>, <b>Podgrzybek +2</b>, <b>Kurka +1</b>. Uwaga na <b>muchomora</b> – wyrzucasz z koszyka najcenniejszego grzyba!</li>
-          <li>🦇 Nietoperz: 3 pola do przodu · 👻 Duch: 3 pola wstecz · 🌫️ Mgła: tracisz kolejkę · 🎃 Dynia: rzucasz jeszcze raz · 🧙 Wiedźma: podkradasz grzyba liderowi.</li>
-          <li>🛖 Kto pierwszy w Chatce, dostaje premię +3 (potem +2, +1). Gra trwa, aż wszyscy dojdą – wygrywa najpełniejszy koszyk.</li>
-        </ul>
-      </div>
-      <div class="glass step">
         <h3>Twój pionek</h3>
-        <div class="photo-row">
+        <div class="me-row">
           ${avatar(me(), "xl")}
           <div class="photo-btns">
-            <label class="btn orange small"><input type="file" accept="image/*" capture="user" data-photo hidden>📸 Zrób selfie</label>
-            <label class="btn ghost small"><input type="file" accept="image/*" data-photo hidden>🖼️ Z galerii</label>
+            <label class="btn orange small"><input type="file" accept="image/*" capture="user" data-photo hidden>📸 Selfie</label>
+            <label class="btn ghost small"><input type="file" accept="image/*" data-photo hidden>🖼️ Galeria</label>
           </div>
         </div>
-        <p class="hint">Twoje zdjęcie będzie pionkiem na leśnej ścieżce (nieobowiązkowe).</p>
       </div>
-      <div class="glass">
-        <h3>Grzybiarze <span class="count">${list.filter(p => p.online).length}</span></h3>
-        <ul class="plist compact">${list.map(p => `<li class="${p.online ? "" : "off"}">${avatar(p.id, "sm")}<span class="pn">${esc(p.name)}</span>${S.photos[p.id] ? "" : '<span class="tag dim">bez zdjęcia</span>'}</li>`).join("")}</ul>
-      </div>
-      <div class="glass settings">
-        <div class="set-row"><span>Długość ścieżki<small>krótsza = szybsza gra</small></span>
+      <div class="glass settings compact">
+        <div class="ready-row">
+          ${online.map(p => `<span class="rp" title="${esc(p.name)}">${avatar(p.id, "sm")}</span>`).join("")}
+          <span class="lbl">Grzybiarze: ${online.length}</span>
+        </div>
+        <div class="set-row"><span>Długość ścieżki</span>
           <div class="seg">${LENGTHS.map(n => `<button class="${v.opts.len === n ? "on" : ""}" ${host ? `data-act="opt" data-x="len" data-y="${n}"` : "disabled"}>${n}</button>`).join("")}</div></div>
-        ${host ? `<button class="btn orange big" data-act="start" ${list.filter(p => p.online).length < 2 ? "disabled" : ""}>🧺 Ruszamy do lasu</button>`
+        ${host ? `<button class="btn orange big" data-act="start" ${online.length < 2 ? "disabled" : ""}>🧺 Ruszamy do lasu</button>`
           : `<p class="hint wait">⏳ Host zaraz wyruszy…</p>`}
       </div>
-    </section>`;
+    </div></section>${rulesModal("Jak grać w Upiorne Grzybobranie?", rules)}`;
   }
 
   const seen = { roll: null, event: null };
