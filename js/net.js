@@ -3,6 +3,7 @@
 // Lekki zamiennik PeerJS z tym samym kształtem API (on/open/connection/connect/send/close),
 // ale zamiast WebRTC i publicznego serwera PeerJS wszystko idzie WebSocketem przez pokoje.g-mal.com.pl.
 // Do testów lokalnych: ?relay=ws://localhost:8787
+// Pokoje są rozdzielone per gra: przedrostek identyfikatora (np. "upiornanoc-gmal-") wyznacza przestrzeń pokoi.
 
 const RELAY_URL = (() => {
   const q = new URLSearchParams(location.search).get("relay");
@@ -17,6 +18,11 @@ class Emitter {
 }
 
 const randomId = () => Math.random().toString(36).slice(2, 12);
+const roomPath = full => {
+  const s = String(full);
+  const ns = s.slice(0, -5).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 30);
+  return (ns ? ns + "/" : "") + s.slice(-5).toUpperCase();
+};
 
 // U hosta: wirtualne połączenie z jednym gościem.
 class HostSideConn extends Emitter {
@@ -28,12 +34,12 @@ class HostSideConn extends Emitter {
 
 // U gościa: własny WebSocket do pokoju.
 class GuestConn extends Emitter {
-  constructor(peer, code) {
+  constructor(peer, target) {
     super();
     this._p = peer;
-    this.peer = code;
+    this.peer = String(target);
     this.open = false;
-    const ws = this._ws = new WebSocket(`${RELAY_URL}/room/${code}?role=guest&id=${encodeURIComponent(peer.id)}`);
+    const ws = this._ws = new WebSocket(`${RELAY_URL}/room/${roomPath(target)}?role=guest&id=${encodeURIComponent(peer.id)}`);
     ws.onmessage = e => {
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
@@ -62,7 +68,8 @@ class RelayPeer extends Emitter {
     if (id) {
       this.id = id;
       this._code = id.slice(-5).toUpperCase();
-      this._key = RelayPeer.hostKey(this._code);
+      this._path = roomPath(id);
+      this._key = RelayPeer.hostKey(this._path);
       this._connectHost();
     } else {
       this.id = "g" + randomId();
@@ -71,8 +78,8 @@ class RelayPeer extends Emitter {
   }
 
   // Klucz hosta pozwala tej przeglądarce odzyskać pokój po odświeżeniu.
-  static hostKey(code) {
-    const k = "hg-hostkey-" + code;
+  static hostKey(path) {
+    const k = "relay-hostkey-" + path;
     let v = null;
     try { v = localStorage.getItem(k); } catch {}
     if (!v) { v = randomId() + randomId(); try { localStorage.setItem(k, v); } catch {} }
@@ -80,7 +87,7 @@ class RelayPeer extends Emitter {
   }
 
   _connectHost() {
-    const ws = this._ws = new WebSocket(`${RELAY_URL}/room/${this._code}?role=host&key=${this._key}`);
+    const ws = this._ws = new WebSocket(`${RELAY_URL}/room/${this._path}?role=host&key=${this._key}`);
     let rejected = false;
     ws.onmessage = e => {
       let m;
@@ -103,6 +110,10 @@ class RelayPeer extends Emitter {
       } else if (m.sys === "msg") {
         const c = this._conns.get(m.from);
         if (c) c.emit("data", m.data);
+      } else if (m.sys === "roster") {
+        // Po powrocie hosta: goście, których już nie ma, są rozłączani.
+        const ids = new Set(m.ids || []);
+        for (const c of [...this._conns.values()]) if (!ids.has(c.peer)) c._drop();
       } else if (m.sys === "leave") {
         const c = this._conns.get(m.id);
         if (c) c._drop();
@@ -111,7 +122,7 @@ class RelayPeer extends Emitter {
     ws.onclose = () => {
       clearInterval(this._ping);
       if (this._ws !== ws || this.destroyed || rejected) return;
-      for (const c of [...this._conns.values()]) c._drop();
+      // Połączenia z gośćmi zostają – serwer czeka 30 s na powrót hosta, a potem przyśle listę obecnych.
       this.disconnected = true;
       this.emit("disconnected");
     };
@@ -121,7 +132,7 @@ class RelayPeer extends Emitter {
 
   _send(obj) { if (this._ws && this._ws.readyState === 1) this._ws.send(JSON.stringify(obj)); }
 
-  connect(target) { return new GuestConn(this, String(target).slice(-5).toUpperCase()); }
+  connect(target) { return new GuestConn(this, target); }
 
   reconnect() {
     if (this.destroyed || !this._code || !this.disconnected || this._reconnecting) return;

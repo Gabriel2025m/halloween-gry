@@ -2,18 +2,22 @@
 // Jeden Durable Object = jeden pokój (kod 5 znaków). Host i goście łączą się WebSocketem,
 // serwer tylko przekazuje wiadomości: gość → host oraz host → wybrany gość. Cały stan gry trzyma host.
 //
-//   wss://pokoje.g-mal.com.pl/room/ABCDE?role=host&key=…   – host (key pozwala wrócić po odświeżeniu)
-//   wss://pokoje.g-mal.com.pl/room/ABCDE?role=guest&id=…   – gość
+//   wss://pokoje.g-mal.com.pl/room/<gra>/ABCDE?role=host&key=…   – host (key pozwala wrócić po odświeżeniu)
+//   wss://pokoje.g-mal.com.pl/room/<gra>/ABCDE?role=guest&id=…   – gość
+// <gra> oddziela pokoje różnych gier (np. upiornanocgmal, fakeczyfaktpl).
 //
 // Ramki serwera do klienta mają pole `sys`, zwykłe wiadomości gry jadą w `data`.
 
 const CODE_RE = /^[A-Z0-9]{5}$/;
 const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 const MAX_MSG = 400_000;
-const MAX_GUESTS = 16;
+const MAX_GUESTS = 40;
+const HOST_GRACE_MS = 30_000; // tyle czekamy na powrót hosta, zanim rozłączymy gości
 
 const ALLOWED_ORIGINS = [
   "https://gry.g-mal.com.pl",
+  "https://fake-czy-fakt-unseen.pl",
+  "https://www.fake-czy-fakt-unseen.pl",
   "https://gabriel2025m.github.io",
   /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
 ];
@@ -23,12 +27,12 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname === "/" || url.pathname === "/health") return new Response("Upiorna Noc Gier – serwer pokoi 🎃", { status: 200 });
-    const m = url.pathname.match(/^\/room\/([A-Za-z0-9]{5})$/);
+    const m = url.pathname.match(/^\/room\/(?:([a-z0-9]{1,30})\/)?([A-Za-z0-9]{5})$/);
     if (!m) return new Response("Not found", { status: 404 });
     if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
     if (!originOk(req.headers.get("Origin"))) return new Response("Forbidden", { status: 403 });
-    const code = m[1].toUpperCase();
-    const stub = env.ROOMS.get(env.ROOMS.idFromName(code));
+    const code = m[2].toUpperCase();
+    const stub = env.ROOMS.get(env.ROOMS.idFromName(m[1] ? `${m[1]}:${code}` : code));
     return stub.fetch(req);
   },
 };
@@ -71,6 +75,9 @@ export class Room {
       this.state.acceptWebSocket(server, ["host"]);
       server.serializeAttachment({ key });
       server.send(JSON.stringify({ sys: "open" }));
+      // Host wrócił w czasie tolerancji – mówimy mu, którzy goście nadal są w pokoju.
+      await this.state.storage.deleteAlarm();
+      server.send(JSON.stringify({ sys: "roster", ids: this.guests().map(g => (g.deserializeAttachment() || {}).id).filter(Boolean) }));
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -116,14 +123,19 @@ export class Room {
   }
   async webSocketError(ws) { this.gone(ws); }
 
+  async alarm() {
+    if (this.host()) return;
+    for (const g of this.guests()) try { g.close(4002, "host-left"); } catch {}
+  }
+
   gone(ws) {
     const tags = this.state.getTags(ws);
     const att = ws.deserializeAttachment() || {};
     if (att.replaced || tags.includes("rejected")) return;
     if (tags.includes("host")) {
       if (this.host()) return; // już jest nowe połączenie hosta
-      // Host zniknął – goście dostają rozłączenie i sami spróbują wrócić, gdy host się pojawi.
-      for (const g of this.guests()) try { g.close(4002, "host-left"); } catch {}
+      // Host zniknął – dajemy mu chwilę na powrót (np. słaby zasięg), potem rozłączamy gości.
+      this.state.storage.setAlarm(Date.now() + HOST_GRACE_MS);
     } else if (tags.includes("guest") && att.id) {
       if (this.guest(att.id)) return; // gość zdążył połączyć się ponownie
       const host = this.host();
