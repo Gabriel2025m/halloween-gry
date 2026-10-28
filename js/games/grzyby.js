@@ -240,7 +240,7 @@
 
   function cardHTML(c, cls = "") {
     const m = MUSHROOMS[c.t];
-    return `<div class="gcard ${c.t} ${cls}">${mushSVG(c.t, 54)}<b>${m.name}</b><small>${m.poison ? "trujący!" : `+${m.pts} pkt`}</small></div>`;
+    return `<div class="gcard ${c.t} ${cls}">${mushSVG(c.t, 40)}<b>${m.name}</b><small>${m.poison ? "trujący!" : `+${m.pts} pkt`}</small></div>`;
   }
 
   // Ścieżka węża: 6 kolumn, kolejne rzędy w przeciwną stronę.
@@ -333,17 +333,17 @@
     const done = v.done.includes(meId);
 
     return `
-    <section class="gm-table ${myTurn ? "my-turn" : ""}">
+    <section class="gm-table fit-screen ${myTurn ? "my-turn" : ""}">
       <div class="gm-chips" data-keep="gmchips">${chips}</div>
-      <div class="gm-board" style="grid-template-rows:repeat(${rows},1fr)">${cells}<div class="gm-pawns">${pawns}</div></div>
+      <div class="gm-boardwrap"><div class="gm-board" style="--rows:${rows};grid-template-rows:repeat(${rows},1fr)">${cells}<div class="gm-pawns">${pawns}</div></div></div>
       <div class="gm-panel glass">
         <div class="gm-turn">${v.phase !== "play" ? "Koniec grzybobrania" : myTurn ? "Twoja kolej – rzucaj!" : `Rzuca: ${avatar(v.turn, "xs")} <b>${esc(pName(v.turn))}</b>`}</div>
         <div class="gm-mid">${dice}${evHTML}</div>
         ${myTurn ? `<button class="btn orange big gm-roll" data-act="roll">🎲 Rzuć kostką</button>` : ""}
-        ${v.seats.includes(meId) ? `<div class="gm-basket"><span>🧺 Twój koszyk${done ? ` · 🛖 w Chatce (${v.done.indexOf(meId) + 1}.)` : ""}:</span>
-          ${myBasket.length ? myBasket.map(c => `<span class="bk" title="${MUSHROOMS[c.t].name}">${mushSVG(c.t, 26)}</span>`).join("") : '<em>pusto… na razie</em>'}
+        ${v.seats.includes(meId) ? `<div class="gm-basket"><span class="bk-label">🧺${done ? ` 🛖${v.done.indexOf(meId) + 1}.` : ""}</span>
+          <span class="bk-list">${myBasket.length ? myBasket.map(c => `<span class="bk" title="${MUSHROOMS[c.t].name}">${mushSVG(c.t, 24)}</span>`).join("") : '<em>koszyk pusty… na razie</em>'}</span>
           <b>${v.scores[meId] || 0} pkt</b></div>` : '<p class="hint">👀 Oglądasz tę wyprawę – dołączysz w następnej.</p>'}
-        <ul class="feed">${v.log.slice(-3).reverse().map((l, i) => `<li class="${l.kind} ${i ? "" : "newest"}">${esc(l.txt)}</li>`).join("")}</ul>
+        <ul class="feed">${v.log.slice(-2).reverse().map((l, i) => `<li class="${l.kind} ${i ? "" : "newest"}">${esc(l.txt)}</li>`).join("")}</ul>
       </div>
     </section>`;
   }

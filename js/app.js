@@ -57,6 +57,10 @@ function render() {
   tpl.innerHTML = screenHTML();
   morph(app, tpl.content);
   document.body.dataset.screen = S.screen === "room" && S.view ? (S.view.phase === "game" ? "game-" + S.view.gameId : "lobby") : S.screen;
+  // Ekran gry mieści się w oknie bez przewijania; gra może jeszcze dopasować rozmiary (layout).
+  document.body.classList.toggle("fit", !!app.querySelector(".fit-screen"));
+  const g = S.screen === "room" && S.view && S.view.phase === "game" ? gameById(S.view.gameId) : null;
+  if (g && g.layout) g.layout(app);
   updatePhotoCSS();
 }
 
@@ -78,6 +82,9 @@ function morph(from, to) {
   }
   while (a.length > b.length) from.removeChild(from.lastChild);
 }
+
+let resizeTimer = null;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.screen === "room") render(); }, 120); });
 
 function screenHTML() {
   if (S.screen === "connecting") return connectingHTML();

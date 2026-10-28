@@ -442,7 +442,7 @@
     }
 
     return `
-    <section class="uno-table ${myTurn ? "my-turn" : ""}">
+    <section class="uno-table fit-screen ${myTurn ? "my-turn" : ""}">
       <div class="opps" data-keep="opps">${opps.map(opChip).join("") || '<p class="hint">Brak przeciwników</p>'}</div>
       ${myPlace ? `<div class="won-bar"><span class="wb-medal">${medal(myPlace)}</span><span><b>${myPlace}. miejsce!</b> Nie masz już kart – patrz, jak grają inni 👀</span></div>` : ""}
 
@@ -470,7 +470,7 @@
       <div class="me-area">
         ${myPlace || !hand ? liveHTML(v, myPlace) : `
           <div class="actions">${actions}</div>
-          <div class="hand ${myTurn ? "active" : ""} ${hand.length > 10 ? "many" : ""}" data-keep="hand">
+          <div class="hand ${myTurn ? "active" : ""}" data-keep="hand">
             ${hand.map((c, i) => {
               const ok = playable(c);
               const isNew = newIds.includes(c.id);
@@ -509,6 +509,21 @@
       ${isHost() ? `<div class="over-btns"><button class="btn orange" data-act="start">🔁 Rewanż</button><button class="btn ghost" data-act="setup">⚙️ Zmień zasady</button><button class="btn ghost small" data-act="room.lobby">🏚️ Lobby</button></div>`
         : `<p class="hint wait">⏳ Host zdecyduje, co dalej…</p>`}
     </div></div>`;
+  }
+
+  // Karty w ręce dobierają rozmiar tak, żeby wszystkie zmieściły się w ~1/3 ekranu.
+  function layout(root) {
+    const hand = root.querySelector(".hand");
+    if (!hand) return;
+    const n = hand.children.length;
+    const W = hand.clientWidth - 8;
+    const H = Math.max(96, window.innerHeight * (window.innerHeight < 720 ? 0.25 : 0.3));
+    let w = 34;
+    for (let t = 84; t >= 34; t -= 2) {
+      const cols = Math.max(1, Math.floor((W + 4) / (t + 4)));
+      if (Math.ceil(n / cols) * (t * 1.48 + 6) + 14 <= H) { w = t; break; }
+    }
+    hand.style.setProperty("--hw", w + "px");
   }
 
   function photoMap(v) {
@@ -579,6 +594,6 @@
   registerGame({
     id: "uno", name: "Upiorne UNO", emoji: "🃏", tagline: "UNO z Waszymi twarzami – każdy gracz to osobny kolor, a zamiast +2/+4 jest +3.",
     min: 2, max: 10,
-    create, action, view, render, playerLeft, photoMap, hostMenu, effects,
+    create, action, view, render, playerLeft, photoMap, hostMenu, effects, layout,
   });
 })();
