@@ -7,6 +7,8 @@ Adres: https://gry.g-mal.com.pl
 ## Gry
 - **Upiorne UNO** – każdy gracz to osobny kolor z jego twarzą na kartach 1–9, jedyna karta specjalna to +3, opcjonalne „pary” i przebijanie +3.
 - **Upiorne Grzybobranie** – rzut kostką i wędrówka nawiedzoną leśną ścieżką do Chatki: grzyby to punkty, muchomor zabiera najlepszego grzyba, a nietoperze, duchy, mgła, dynie i wiedźma mieszają w wyścigu. Wygrywa najpełniejszy koszyk.
+- **Dyniowy Refleks** – gra na refleks: po losowej chwili pojawia się dynia i kto dotknie najszybciej, zbiera punkty; ducha dotykać nie wolno, za falstart jest kara.
+- **Kto z nas?** – halloweenowe pytania o ekipę; każdy głosuje na kogoś z pokoju, punkty za trafienie w zdanie większości, na koniec tytuły wieczoru.
 
 ## Dodawanie gier
 Nowa gra to plik w `js/games/`, który woła `registerGame({ id, name, emoji, tagline, min, max, create, action, view, render, … })` – opis interfejsu jest w `js/app.js` (sekcja „Rejestr gier”). Dołącz plik w `index.html` i gra pojawi się w lobby.
