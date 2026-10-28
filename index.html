@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0612">
+  <meta name="description" content="Halloweenowe gry dla ekipy – każdy gra na swoim telefonie.">
+  <title>Upiorna Noc Gier</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎃</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Butcherman&family=Creepster&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
+  <script src="js/app.js" defer></script>
+  <script src="js/games/uno.js" defer></script>
+</head>
+<body>
+  <div class="sky" aria-hidden="true">
+    <div class="moon"></div>
+    <div class="stars"></div>
+    <svg width="0" height="0" style="position:absolute">
+      <symbol id="bat" viewBox="0 0 100 46">
+        <path d="M50 14c-1.6-4-3-6-4.4-6.6.3 2 .2 3.6-.6 4.6C40 7 30 4 16 6c6 4 7.5 9.5 4.5 15C14 18 6 19 0 25c9-.5 15 3 18 10 5-5 12-6.5 19-3.5 2.5-5 6.5-7.5 13-6 6.5-1.5 10.5 1 13 6 7-3 14-1.5 19 3.5 3-7 9-10.5 18-10-6-6-14-7-20.5-4C76.5 15.5 78 10 84 6 70 4 60 7 55 12c-.8-1-.9-2.6-.6-4.6C53 8 51.6 10 50 14z"/>
+      </symbol>
+    </svg>
+    <svg class="bat b1"><use href="#bat"/></svg>
+    <svg class="bat b2"><use href="#bat"/></svg>
+    <svg class="bat b3"><use href="#bat"/></svg>
+    <svg class="bat b4"><use href="#bat"/></svg>
+    <div class="fog f1"></div>
+    <div class="fog f2"></div>
+    <div class="fog f3"></div>
+  </div>
+  <main id="app"></main>
+  <div id="fx" aria-hidden="true"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <style id="photo-css"></style>
+</body>
+</html>
