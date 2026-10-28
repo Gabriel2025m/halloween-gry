@@ -403,6 +403,20 @@ body[data-screen="game-uno"] .sky .bat { opacity: .35; }
 .podium { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 8px; }
 .pod { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 6px; border-radius: 99px; background: rgba(255, 210, 63, .12); border: 1px solid rgba(255, 210, 63, .35); font-size: .78rem; animation: rise .4s ease both; }
 .pod b { font-weight: 800; }
+.won-bar { display: flex; align-items: center; gap: 10px; margin: 2px 12px 0; padding: 8px 14px; border-radius: 14px; font-size: .88rem; color: var(--muted); background: linear-gradient(135deg, rgba(255, 210, 63, .2), rgba(255, 122, 26, .12)); border: 1px solid rgba(255, 210, 63, .4); animation: rise .5s ease both; }
+.won-bar b { color: #ffd23f; font-size: 1rem; margin-right: 4px; }
+.wb-medal { font-size: 1.8rem; filter: drop-shadow(0 0 10px rgba(255, 210, 63, .7)); }
+.watch { max-width: 420px; margin: 0 auto; padding: 0 4px; }
+.watch h4 { margin: 4px 0 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 1.2s ease-in-out infinite; }
+.live { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 38vh; overflow-y: auto; }
+.lv { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, .05); font-size: .85rem; color: var(--muted); animation: rise .35s ease both; }
+.lv:first-child { background: rgba(255, 255, 255, .1); color: var(--ink); }
+.lv b { color: var(--ink); }
+.lv.hit span { color: #ff8a98; }
+.lv.win span { color: #ffd23f; }
+.lv.uno span { color: var(--orange2); }
+.lv .ucard.mini { --w: 30px; border-width: 2px; flex: none; }
 .finished-me { display: flex; align-items: center; gap: 12px; margin: 6px auto 4px; max-width: 360px; padding: 14px 16px; border-radius: 18px; background: linear-gradient(135deg, rgba(255, 210, 63, .18), rgba(255, 122, 26, .12)); border: 1px solid rgba(255, 210, 63, .4); animation: rise .5s ease both; }
 .fm-medal { font-size: 2.6rem; filter: drop-shadow(0 0 12px rgba(255, 210, 63, .7)); }
 .finished-me b { display: block; font-size: 1.2rem; color: #ffd23f; }

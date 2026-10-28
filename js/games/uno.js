@@ -50,7 +50,7 @@
 
   const top = st => (st.discard.length ? st.discard[st.discard.length - 1].card : null);
   const cur = st => st.seats[st.turn];
-  function log(st, txt, kind = "") { st.log.push({ n: st.seq++, txt, kind }); if (st.log.length > 12) st.log.shift(); }
+  function log(st, txt, kind = "", extra) { st.log.push({ n: st.seq++, txt, kind, ...extra }); if (st.log.length > 12) st.log.shift(); }
 
   function draw1(st) {
     if (!st.deck.length && st.discard.length > 1) {
@@ -133,7 +133,7 @@
     st.discard.push({ card, by: pid, pair });
     st.last = { n: st.seq, by: pid };
     const nm = nameIn(room, pid);
-    log(st, `${nm} kładzie ${label(card)}${pair ? " 💞 (para)" : ""}`, "play");
+    log(st, `${nm} kładzie ${label(card)}${pair ? " 💞 (para)" : ""}`, "play", { by: pid, card, pair });
     const out = hand.length === 0;
     if (out) {
       st.finished.push(pid);
@@ -287,7 +287,7 @@
       under: d.slice(-4, -1).map(x => x.card),
       deck: st.deck.length, turn: cur(st), pending: st.pending,
       drew: pid === cur(st) ? st.drew : null,
-      uno: st.uno, vuln: st.vuln, log: st.log.slice(-5), winner: st.winner, ranking: st.ranking,
+      uno: st.uno, vuln: st.vuln, log: st.log.slice(-8), winner: st.winner, ranking: st.ranking,
       finished: st.finished || [], done: st.done, loser: st.loser,
       shout: st.shout, last: st.last, round: st.round,
     };
@@ -444,6 +444,7 @@
     return `
     <section class="uno-table ${myTurn ? "my-turn" : ""}">
       <div class="opps" data-keep="opps">${opps.map(opChip).join("") || '<p class="hint">Brak przeciwników</p>'}</div>
+      ${myPlace ? `<div class="won-bar"><span class="wb-medal">${medal(myPlace)}</span><span><b>${myPlace}. miejsce!</b> Nie masz już kart – patrz, jak grają inni 👀</span></div>` : ""}
 
       <div class="tablecloth">
         ${podium}
@@ -467,8 +468,7 @@
       </div>
 
       <div class="me-area">
-        ${myPlace ? `<div class="finished-me"><span class="fm-medal">${medal(myPlace)}</span><div><b>${myPlace}. miejsce!</b><small>Nie masz już kart – patrz, kto zostanie z nimi do końca 👻</small></div></div>`
-        : hand ? `
+        ${myPlace || !hand ? liveHTML(v, myPlace) : `
           <div class="actions">${actions}</div>
           <div class="hand ${myTurn ? "active" : ""} ${hand.length > 10 ? "many" : ""}" data-keep="hand">
             ${hand.map((c, i) => {
@@ -478,10 +478,21 @@
                 style="--i:${firstDeal ? i : 0}" data-act="play" data-x="${c.id}" ${ok ? "" : 'aria-disabled="true"'}>${cardHTML(c)}</button>`;
             }).join("")}
           </div>
-          <div class="my-count">${avatar(meId, "xs")} Masz <b>${hand.length}</b> ${hand.length === 1 ? "kartę" : cardsWord(hand.length)}</div>`
-        : `<p class="hint spectate">👀 Oglądasz tę rundę – dołączysz w następnej.</p>`}
+          <div class="my-count">${avatar(meId, "xs")} Masz <b>${hand.length}</b> ${hand.length === 1 ? "kartę" : cardsWord(hand.length)}</div>`}
       </div>
     </section>`;
+  }
+
+  // Dla tych, którzy skończyli albo tylko oglądają: kto co kładzie, na żywo.
+  function liveHTML(v, myPlace) {
+    const items = v.log.slice().reverse().map(l => l.kind === "play" && l.card
+      ? `<li class="lv play" data-key="l${l.n}">${cardHTML(l.card, "mini")}${avatar(l.by, "xs")}<span><b>${esc(pName(l.by))}</b> kładzie ${label(l.card)}${l.pair ? " 💞" : ""}</span></li>`
+      : `<li class="lv ${l.kind}" data-key="l${l.n}"><span>${esc(l.txt)}</span></li>`).join("");
+    return `<div class="watch">
+      <h4><i class="live-dot"></i> Na żywo</h4>
+      <ul class="live">${items}</ul>
+      ${myPlace ? "" : '<p class="hint">👀 Oglądasz tę rundę – dołączysz w następnej.</p>'}
+    </div>`;
   }
 
   function overHTML(v) {
