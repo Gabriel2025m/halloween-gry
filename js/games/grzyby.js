@@ -243,9 +243,83 @@
     return `<div class="gcard ${c.t} ${cls}">${mushSVG(c.t, 40)}<b>${m.name}</b><small>${m.poison ? "trujący!" : `+${m.pts} pkt`}</small></div>`;
   }
 
-  // Ścieżka węża: 6 kolumn, kolejne rzędy w przeciwną stronę.
-  const COLS = 6;
-  const cellPos = i => { const r = Math.floor(i / COLS); const c = r % 2 ? COLS - 1 - (i % COLS) : i % COLS; return { r, c }; };
+  // ─────────── Plansza jak z pudełka: kręta leśna ścieżka (SVG 100 × 140) ───────────
+  const MAP_W = 100, MAP_H = 140;
+  const FCOL = { start: "#d8cfbd", chatka: "#ffd23f", grzyb: "#c98a4b", nietoperz: "#9b5cff", duch: "#2fc3ff", mgla: "#b8b8cc", wiedzma: "#ff4fb8", dynia: "#ff7a1a" };
+  const trackCache = {};
+
+  // Serpentyna od Startu (dół) do Chatki (góra), pola rozłożone równo wzdłuż drogi.
+  function track(n) {
+    if (trackCache[n]) return trackCache[n];
+    const rows = 6, top = 15, bottom = 125, left = 21, right = 79;
+    const gap = (bottom - top) / (rows - 1), rad = gap / 2;
+    const dense = [];
+    for (let i = 0; i < rows; i++) {
+      const y = bottom - i * gap, ltr = i % 2 === 0, sgn = i % 2 ? -1 : 1;
+      for (let t = 0; t <= 1.0001; t += 0.01)
+        dense.push({ x: ltr ? left + (right - left) * t : right - (right - left) * t, y: y + Math.sin(t * Math.PI * 2) * 2.4 * sgn });
+      if (i < rows - 1) {
+        const cx = ltr ? right : left, cy = y - rad;
+        for (let a = Math.PI / 40; a < Math.PI; a += Math.PI / 40)
+          dense.push({ x: cx + (ltr ? 1 : -1) * Math.sin(a) * rad, y: cy + Math.cos(a) * rad });
+      }
+    }
+    const len = [0];
+    for (let i = 1; i < dense.length; i++) len.push(len[i - 1] + Math.hypot(dense[i].x - dense[i - 1].x, dense[i].y - dense[i - 1].y));
+    const total = len[len.length - 1];
+    const pts = [];
+    for (let k = 0, j = 0; k < n; k++) {
+      const target = (total * k) / (n - 1);
+      while (j < len.length - 2 && len[j + 1] < target) j++;
+      const f = (target - len[j]) / (len[j + 1] - len[j] || 1);
+      pts.push({ x: dense[j].x + (dense[j + 1].x - dense[j].x) * f, y: dense[j].y + (dense[j + 1].y - dense[j].y) * f });
+    }
+    // Dekoracje lasu: duże drzewa w zakrętach, drobiazgi między pasami ścieżki.
+    let seed = n * 9973;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const deco = [];
+    for (let i = 0; i < rows - 1; i++) {
+      const ltr = i % 2 === 0, y = bottom - i * gap;
+      deco.push({ x: ltr ? right : left, y: y - rad, e: ["🌲", "🎃", "🌳", "🦉", "🌲"][i], s: 7 });
+      for (let x = left + 7; x <= right - 7; x += 9 + rnd() * 5)
+        deco.push({ x: x + rnd() * 3, y: y - rad + (rnd() - 0.5) * 3, e: ["🌲", "🍂", "🪨", "🌿", "🕸️", "🌲", "🍁", "🕯️", "🌳"][Math.floor(rnd() * 9)], s: 3.6 + rnd() * 1.8 });
+    }
+    deco.push({ x: 8, y: bottom + 9, e: "🪦", s: 5 }, { x: 92, y: bottom + 9, e: "🎃", s: 5 }, { x: 92, y: 6, e: "🦇", s: 4.5 }, { x: 50, y: bottom + 10, e: "🌾", s: 4 });
+    return (trackCache[n] = { pts, dense, r: Math.min(5.6, (total / (n - 1)) * 0.42), deco });
+  }
+
+  function mapSVG(v, reach) {
+    const { pts, dense, r, deco } = track(v.board.length);
+    const d = "M" + dense.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" L");
+    const grads = Object.entries(FCOL).map(([k, c]) => `<radialGradient id="gf-${k}" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".35" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity=".75"/></radialGradient>`).join("");
+    const fields = v.board.map((f, i) => {
+      const p = pts[i], big = f === "start" || f === "chatka", rr = big ? r * 1.45 : r;
+      return `<g class="gm-field f-${f} ${reach.has(i) ? "reach" : ""} ${anim.tip === i ? "tipped" : ""}" data-do="gmCell" data-x="${i}" style="--k:${i}">
+        <circle cx="${p.x}" cy="${p.y + rr * 0.22}" r="${rr}" fill="rgba(0,0,0,.5)"/>
+        <circle class="disc" cx="${p.x}" cy="${p.y}" r="${rr}" fill="url(#gf-${f})" stroke="#f4ecdb" stroke-width="${(rr * 0.13).toFixed(2)}"/>
+        <circle class="ring" cx="${p.x}" cy="${p.y}" r="${rr + 1.1}" fill="none"/>
+        <text class="icon" x="${p.x}" y="${p.y}" font-size="${(rr * 1.12).toFixed(2)}" text-anchor="middle" dominant-baseline="central">${FIELDS[f].icon}</text>
+        ${i && !big ? `<text class="num" x="${p.x + rr * 0.72}" y="${p.y - rr * 0.62}" font-size="${(rr * 0.5).toFixed(2)}" text-anchor="middle" dominant-baseline="central">${i}</text>` : ""}
+      </g>`;
+    }).join("");
+    return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" aria-label="Plansza">
+      <defs>${grads}
+        <radialGradient id="gm-forest" cx="50%" cy="35%" r="80%"><stop offset="0" stop-color="#1f3a1b"/><stop offset=".6" stop-color="#122410"/><stop offset="1" stop-color="#08120a"/></radialGradient>
+        <radialGradient id="gm-moon" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff3c4" stop-opacity=".9"/><stop offset=".25" stop-color="#ffd27a" stop-opacity=".5"/><stop offset="1" stop-color="#ffb347" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect x="1" y="1" width="${MAP_W - 2}" height="${MAP_H - 2}" rx="5" fill="url(#gm-forest)"/>
+      <circle cx="84" cy="9" r="16" fill="url(#gm-moon)"/>
+      <ellipse cx="30" cy="72" rx="38" ry="10" fill="#cfd7ff" opacity=".06"/>
+      <ellipse cx="72" cy="110" rx="34" ry="8" fill="#cfd7ff" opacity=".05"/>
+      ${deco.map(o => `<text class="deco" x="${o.x.toFixed(1)}" y="${o.y.toFixed(1)}" font-size="${o.s.toFixed(1)}" text-anchor="middle" dominant-baseline="central">${o.e}</text>`).join("")}
+      <path d="${d}" fill="none" stroke="#2a1a0c" stroke-width="${(r * 2.5).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>
+      <path d="${d}" fill="none" stroke="#8a6238" stroke-width="${(r * 2.05).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${d}" fill="none" stroke="#f3d9a8" stroke-opacity=".28" stroke-width=".6" stroke-dasharray="1.4 2.6" stroke-linecap="round"/>
+      ${fields}
+      <rect x="1" y="1" width="${MAP_W - 2}" height="${MAP_H - 2}" rx="5" fill="none" stroke="#6b4423" stroke-width="2.4"/>
+      <rect x="2.6" y="2.6" width="${MAP_W - 5.2}" height="${MAP_H - 5.2}" rx="4" fill="none" stroke="#e8b45a" stroke-opacity=".55" stroke-width=".5"/>
+    </svg>`;
+  }
 
   function render(v) {
     if (v.phase === "setup") return setupHTML(v);
@@ -289,23 +363,21 @@
   // Animacja po stronie przeglądarki: pionki idą pole po polu do pozycji z serwera.
   const STEP_MS = 190;
   const anim = { shown: {}, round: null, timer: null, v: null, tip: null, tipTimer: null };
-  const DICE = { 1: [0, 0], 2: [0, -90], 3: [-90, 0], 4: [90, 0], 5: [0, 90], 6: [0, 180] };
   const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
 
   const shownPos = (v, p) => (anim.shown[p] != null ? anim.shown[p] : v.pos[p] || 0);
-  function pawnXY(v, p, rows) {
+  function pawnXY(v, p) {
     const i = shownPos(v, p);
     const k = v.seats.filter(q => q !== p && shownPos(v, q) === i && v.seats.indexOf(q) < v.seats.indexOf(p)).length;
-    const { r, c } = cellPos(i);
-    const dx = (k % 3) * 9 - 9, dy = Math.floor(k / 3) * 7;
-    return { left: `calc(${((c + 0.5) / COLS) * 100}% + ${dx}px)`, top: `calc(${((r + 0.62) / rows) * 100}% + ${dy}px)` };
+    const pt = track(v.board.length).pts[i];
+    const dx = (k % 3) * 10 - (k ? 10 : 0), dy = Math.floor(k / 3) * 8;
+    return { left: `calc(${(pt.x / MAP_W) * 100}% + ${dx}px)`, top: `calc(${(pt.y / MAP_H) * 100}% + ${dy}px)` };
   }
 
   function stepPawns() {
     anim.timer = null;
     const v = anim.v;
     if (!v || v.phase === "setup") return;
-    const rows = Math.ceil(v.board.length / COLS);
     let moving = false;
     for (const p of v.seats) {
       const t = v.pos[p] || 0, s = shownPos(v, p);
@@ -314,7 +386,7 @@
       anim.shown[p] = s + Math.sign(t - s);
       const el = document.querySelector(`[data-key="pw-${p}"]`);
       if (el) {
-        const xy = pawnXY(v, p, rows);
+        const xy = pawnXY(v, p);
         el.style.left = xy.left; el.style.top = xy.top;
         el.classList.remove("hop"); void el.offsetWidth; el.classList.add("hop");
       }
@@ -331,36 +403,28 @@
   };
 
   function diceHTML(v, myTurn, fresh) {
-    const val = v.roll ? v.roll.val : 1;
-    const [rx, ry] = DICE[val];
-    const faces = [1, 2, 3, 4, 5, 6].map(n => `<div class="face f${n}">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => `<i class="${PIPS[n].includes(i) ? "on" : ""}"></i>`).join("")}</div>`).join("");
-    return `<button class="gm-dice3d ${fresh ? "roll" : ""} ${myTurn ? "ready" : ""} ${v.roll ? "" : "idle"}" ${myTurn ? 'data-act="roll" aria-label="Rzuć kostką"' : "disabled"}
-      data-key="dice${v.roll ? v.roll.n : 0}" style="--rx:${rx}deg;--ry:${ry}deg"><div class="cube">${faces}</div></button>`;
+    const val = v.roll ? v.roll.val : 5;
+    const pips = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => `<i class="${PIPS[val].includes(i) ? "on" : ""}"></i>`).join("");
+    return `<button class="gm-die ${fresh ? "roll" : ""} ${myTurn ? "ready" : ""} ${v.roll ? "" : "idle"} v${val}" ${myTurn ? 'data-act="roll" aria-label="Rzuć kostką"' : "disabled"}
+      data-key="die${v.roll ? v.roll.n : 0}"><span class="die-face">${pips}</span></button>`;
   }
 
   function playHTML(v) {
     const meId = me();
     const myTurn = v.phase === "play" && v.turn === meId;
-    const rows = Math.ceil(v.board.length / COLS);
     if (anim.round !== v.round) { anim.round = v.round; anim.shown = {}; }
     const walking = v.seats.some(p => anim.shown[p] != null && anim.shown[p] !== v.pos[p]);
     const myPos = shownPos(v, meId);
     const reach = myTurn && !walking ? new Set([1, 2, 3, 4, 5, 6].map(d => Math.min(v.board.length - 1, myPos + d))) : new Set();
 
-    const cells = v.board.map((f, i) => {
-      const { r, c } = cellPos(i);
-      const k = i - myPos;
-      return `<div class="gm-cell f-${f} ${reach.has(i) ? "reach" : ""} ${anim.tip === i ? "tipped" : ""}" style="grid-row:${r + 1};grid-column:${c + 1};--k:${k}"
-        data-do="gmCell" data-x="${i}"><span>${FIELDS[f].icon}</span><i>${i || ""}</i></div>`;
-    }).join("");
     const pawns = v.seats.map(p => {
-      const xy = pawnXY(v, p, rows);
+      const xy = pawnXY(v, p);
       return `<div class="gm-pawn ${p === v.turn && v.phase === "play" && !walking ? "turn" : ""} ${p === meId ? "mine" : ""}" data-key="pw-${esc(p)}"
         style="left:${xy.left};top:${xy.top}">${avatar(p, "sm")}<i class="base"></i></div>`;
     }).join("");
     const tip = anim.tip != null && v.board[anim.tip] ? (() => { const f = FIELDS[v.board[anim.tip]];
       return `<div class="gm-tip"><span>${f.icon}</span><div><b>${anim.tip ? `Pole ${anim.tip}: ` : ""}${f.name}</b><small>${f.desc || "Tu wszyscy zaczynają wyprawę."}</small></div></div>`; })() : "";
-    const flies = '<i class="ff"></i>'.repeat(9);
+    const flies = '<i class="ff"></i>'.repeat(8);
 
     const freshRoll = v.roll && seen.roll !== v.roll.n;
     seen.roll = v.roll ? v.roll.n : null;
@@ -387,9 +451,9 @@
     return `
     <section class="gm-table fit-screen ${myTurn ? "my-turn" : ""}">
       <div class="gm-chips" data-keep="gmchips">${chips}</div>
-      <div class="gm-boardwrap"><div class="gm-board" style="--rows:${rows};grid-template-rows:repeat(${rows},1fr)">${cells}<div class="gm-pawns">${pawns}</div><div class="gm-flies">${flies}</div></div>${tip}</div>
+      <div class="gm-boardwrap"><div class="gm-map">${mapSVG(v, reach)}<div class="gm-tokens">${flies}${pawns}</div></div>${tip}</div>
       <div class="gm-panel glass">
-        <div class="gm-turn">${v.phase !== "play" ? "Koniec grzybobrania" : myTurn ? (walking ? "Idziesz…" : "Twoja kolej – dotknij kostki!") : `Rzuca: ${avatar(v.turn, "xs")} <b>${esc(pName(v.turn))}</b>`}</div>
+        <div class="gm-turn">${v.phase !== "play" ? "Koniec grzybobrania" : myTurn ? (walking ? "Pionki idą…" : "Twoja kolej – dotknij kostki!") : `Rzuca: ${avatar(v.turn, "xs")} <b>${esc(pName(v.turn))}</b>`}</div>
         <div class="gm-mid">${diceHTML(v, myTurn && !walking, freshRoll)}${evHTML}</div>
         ${myTurn && !walking ? `<button class="btn orange big gm-roll" data-act="roll">🎲 Rzuć kostką</button>` : ""}
         ${v.seats.includes(meId) ? `<div class="gm-basket"><span class="bk-label">🧺${done ? ` 🛖${v.done.indexOf(meId) + 1}.` : ""}</span>
