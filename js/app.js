@@ -6,6 +6,12 @@ const PREFIX = "upiornanoc-gmal-";
 const MAX_PLAYERS = 10;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const HOST_SAVE_MAX_AGE = 12 * 3600e3;
+// Do testów lokalnych: ?peer=9000 łączy z własnym serwerem PeerJS na localhost.
+const PEER_OPTS = (() => {
+  const port = location.hostname === "localhost" && new URLSearchParams(location.search).get("peer");
+  return port ? { host: "localhost", port: +port, path: "/", secure: false } : {};
+})();
+const mkPeer = id => (id ? new Peer(id, PEER_OPTS) : new Peer(PEER_OPTS));
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -296,7 +302,7 @@ function createRoom(restore, attempt = 0) {
   if (attempt === 0) { leaveAll(); S.screen = "connecting"; render(); }
 
   const code = restore ? restore.code : genCode();
-  const peer = new Peer(PREFIX + code);
+  const peer = mkPeer(PREFIX + code);
   S.peer = peer;
 
   peer.on("open", () => {
@@ -333,7 +339,7 @@ function createRoom(restore, attempt = 0) {
       try { peer.destroy(); } catch {}
       if (!restore) return createRoom(null, attempt + 1);
       // Serwer jeszcze pamięta stary identyfikator – próbujemy ponownie przez ~1 min.
-      if (attempt < 20) return setTimeout(() => { if (S.peer === peer) createRoom(restore, attempt + 1); }, 3000);
+      if (attempt < 15) return setTimeout(() => { if (S.peer === peer) createRoom(restore, attempt + 1); }, 5000);
       toast("Nie udało się odzyskać pokoju."); goHome(); return;
     }
     console.warn(err);
@@ -462,6 +468,22 @@ function hostChanged() {
 }
 
 // ═════════════ Gość ═════════════
+// Połączenie z serwerem PeerJS jest jedno na całą wizytę – ponowne próby dołączenia używają go dalej,
+// żeby cała ekipa na jednym Wi-Fi nie wpadła w limit zapytań serwera.
+let attemptSeq = 0;
+
+function guestPeer(cb) {
+  let p = S.peer;
+  if (p && !p.destroyed && p.open) return cb(p);
+  S.peerWaiters = [cb];
+  if (p && !p.destroyed) { if (p.disconnected) try { p.reconnect(); } catch {} return; }
+  p = mkPeer();
+  S.peer = p;
+  p.on("open", () => { if (S.peer !== p) return; const w = S.peerWaiters || []; S.peerWaiters = []; w.forEach(f => f(p)); });
+  p.on("error", err => { if (S.peer === p && S.onPeerError) S.onPeerError(err); });
+  p.on("disconnected", () => { setTimeout(() => { if (S.peer === p && !p.destroyed && p.disconnected) try { p.reconnect(); } catch {} }, 1500); });
+}
+
 function joinRoom(opts = {}) {
   const name = (opts.name || S.name).trim();
   const code = (opts.code || S.joinCode).trim().toUpperCase();
@@ -472,13 +494,14 @@ function joinRoom(opts = {}) {
   ls.set("hg-name", name);
   if (!opts.retry) { leaveAll(); S.screen = "connecting"; render(); }
 
-  if (S.peer) { const old = S.peer; setTimeout(() => { try { old.destroy(); } catch {} }, 100); }
-  const peer = new Peer();
-  S.peer = peer;
+  const my = ++attemptSeq;
   let joined = false;
 
   const fail = text => {
-    if (S.peer !== peer) return;
+    if (my !== attemptSeq) return;
+    clearTimeout(timeout);
+    // Połączenie z serwerem, które się nie otworzyło, nie nadaje się do ponownego użycia.
+    if (S.peer && !S.peer.open) { const p = S.peer; S.peer = null; try { p.destroy(); } catch {} }
     if (opts.retry || opts.auto) return scheduleRetry(code, name);
     toast(text);
     leaveAll();
@@ -487,9 +510,19 @@ function joinRoom(opts = {}) {
   };
   const timeout = setTimeout(() => { if (!joined) fail("Nie udało się połączyć z pokojem."); }, 12000);
 
-  peer.on("open", () => {
+  S.onPeerError = err => {
+    if (my !== attemptSeq) return;
+    if (err.type === "peer-unavailable") fail(`Nie ma pokoju o kodzie ${code} 🕸️`);
+    else if (!joined) fail("Błąd połączenia. Spróbuj ponownie.");
+    else console.warn(err);
+  };
+
+  guestPeer(peer => {
+    if (my !== attemptSeq) return;
     const conn = peer.connect(PREFIX + code, { reliable: true });
+    const old = S.hostConn;
     S.hostConn = conn;
+    if (old) try { old.close(); } catch {}
     conn.on("open", () => conn.send({ t: "join", name, cid: ME }));
     conn.on("data", msg => {
       if (!msg || typeof msg !== "object" || S.hostConn !== conn) return;
@@ -508,7 +541,6 @@ function joinRoom(opts = {}) {
       } else if (msg.t === "photo") {
         S.photos[msg.id] = msg.data;
         render();
-      } else if (msg.t === "hb") {
       } else if (msg.t === "reject") {
         opts.retry = opts.auto = false;
         fail(msg.reason || "Nie można dołączyć.");
@@ -520,34 +552,28 @@ function joinRoom(opts = {}) {
         ss.del("hg-role"); toast("Host zamknął pokój 🕯️"); goHome();
       }
     });
-    const lost = () => { if (S.hostConn === conn && S.mode === "guest") connectionLost(); else if (!joined) fail("Nie udało się połączyć z pokojem."); };
+    const lost = () => { if (S.hostConn === conn && S.mode === "guest" && joined) connectionLost(); else if (!joined) fail("Nie udało się połączyć z pokojem."); };
     conn.on("close", lost);
     conn.on("iceStateChanged", st => { if (st === "failed" || st === "closed") lost(); });
   });
-
-  peer.on("error", err => {
-    if (err.type === "peer-unavailable") fail(`Nie ma pokoju o kodzie ${code} 🕸️`);
-    else if (!joined) fail("Błąd połączenia. Spróbuj ponownie.");
-    else console.warn(err);
-  });
-  peer.on("disconnected", () => { setTimeout(() => { if (S.peer === peer && !peer.destroyed && peer.disconnected) try { peer.reconnect(); } catch {} }, 1000); });
 }
 
 function connectionLost() {
   if (S.lost) return;
   S.lost = true;
   render();
-  scheduleRetry(S.code, S.name.trim() || ls.get("hg-name", ""), 600);
+  scheduleRetry(S.code, S.name.trim() || ls.get("hg-name", ""), 800);
 }
 
-function scheduleRetry(code, name, delay = 2500) {
+// Coraz dłuższe przerwy między próbami (do ~25 s), z odrobiną losowości, żeby telefony nie łączyły się naraz.
+function scheduleRetry(code, name, delay) {
   clearTimeout(S.retryTimer);
-  if (++S.retries > 50) { toast("Nie udało się wrócić do pokoju."); ss.del("hg-role"); goHome(); return; }
+  if (++S.retries > 40) { toast("Nie udało się wrócić do pokoju."); ss.del("hg-role"); goHome(); return; }
   S.lost = true;
   S.mode = S.mode || "guest";
-  if (S.screen === "connecting" && !S.view) S.screen = "connecting";
   render();
-  S.retryTimer = setTimeout(() => joinRoom({ code, name, retry: true }), delay);
+  const wait = delay ?? Math.min(25000, 1500 * 1.5 ** (S.retries - 1)) * (0.8 + Math.random() * 0.4);
+  S.retryTimer = setTimeout(() => joinRoom({ code, name, retry: true }), wait);
 }
 
 // Puls co 5 s – jeśli host milczy > 20 s, łączymy się od nowa.
@@ -576,6 +602,9 @@ function applyView(view) {
 
 function leaveAll() {
   clearTimeout(S.retryTimer);
+  attemptSeq++;
+  S.onPeerError = null;
+  S.peerWaiters = [];
   if (S.mode === "host") for (const c of S.conns.values()) { try { c.send({ t: "closed" }); } catch {} }
   if (S.mode === "guest" && S.hostConn) { try { S.hostConn.send({ t: "leave" }); } catch {} }
   const peer = S.peer;
