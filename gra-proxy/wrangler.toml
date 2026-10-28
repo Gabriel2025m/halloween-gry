@@ -1,0 +1,8 @@
+name = "gra-konkursowa-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [
+  { pattern = "gra.g-mal.com.pl/*", zone_name = "g-mal.com.pl" }
+]

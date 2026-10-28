@@ -18,6 +18,7 @@ const ALLOWED_ORIGINS = [
   "https://gry.g-mal.com.pl",
   "https://fake-czy-fakt-unseen.pl",
   "https://www.fake-czy-fakt-unseen.pl",
+  "https://gra.g-mal.com.pl",
   "https://gabriel2025m.github.io",
   /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
 ];

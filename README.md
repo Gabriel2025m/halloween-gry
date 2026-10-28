@@ -16,3 +16,6 @@ Statyczna strona (vanilla HTML/CSS/JS) na GitHub Pages.
 Połączenia idą przez własny serwer na Cloudflare (`server/`, Worker + Durable Object) pod `wss://pokoje.g-mal.com.pl`, a nie przez publiczny serwer PeerJS – bez cudzych limitów i działa też w sieciach blokujących WebRTC. Klient: `js/net.js`.
 
 Wdrożenie: `cd server && npx wrangler deploy`. Test lokalny: `npx wrangler dev --port 8787`, a grę otwórz z `?relay=ws://localhost:8787`.
+
+## gra.g-mal.com.pl
+`gra-proxy/` to Worker, który pod gra.g-mal.com.pl podaje grę konkursową „FAKE czy FAKT?” bezpośrednio z fake-czy-fakt-unseen.pl (zamiast przekierowania). Dzięki temu gra działa też w sieciach blokujących nowo zarejestrowane domeny. Wdrożenie: `cd gra-proxy && npx wrangler deploy`.
