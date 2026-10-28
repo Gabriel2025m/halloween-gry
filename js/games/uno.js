@@ -142,7 +142,7 @@
     const nm = nameIn(room, pid);
     if (st.pending > 0) {
       const n = give(st, pid, st.pending);
-      log(st, `${nm} dobiera ${n} kart 🩸`, "hit");
+      log(st, `${nm} dobiera ${n} ${n === 1 ? "kartę" : cardsWord(n)} 🩸`, "hit");
       st.pending = 0;
       advance(st);
       return;
