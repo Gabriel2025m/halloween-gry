@@ -1,6 +1,6 @@
 # 🎃 Upiorna Noc Gier
 
-Halloweenowe gry na imprezę – każdy gra na swoim telefonie. Host tworzy pokój, reszta dołącza 5-znakowym kodem (PeerJS, bez logowania).
+Halloweenowe gry na imprezę – każdy gra na swoim telefonie. Host tworzy pokój, reszta dołącza 5-znakowym kodem (bez logowania).
 
 Adres: https://gry.g-mal.com.pl
 
@@ -11,3 +11,8 @@ Adres: https://gry.g-mal.com.pl
 Nowa gra to plik w `js/games/`, który woła `registerGame({ id, name, emoji, tagline, min, max, create, action, view, render, … })` – opis interfejsu jest w `js/app.js` (sekcja „Rejestr gier”). Dołącz plik w `index.html` i gra pojawi się w lobby.
 
 Statyczna strona (vanilla HTML/CSS/JS) na GitHub Pages.
+
+## Serwer pokoi
+Połączenia idą przez własny serwer na Cloudflare (`server/`, Worker + Durable Object) pod `wss://pokoje.g-mal.com.pl`, a nie przez publiczny serwer PeerJS – bez cudzych limitów i działa też w sieciach blokujących WebRTC. Klient: `js/net.js`.
+
+Wdrożenie: `cd server && npx wrangler deploy`. Test lokalny: `npx wrangler dev --port 8787`, a grę otwórz z `?relay=ws://localhost:8787`.

@@ -1,17 +1,12 @@
 "use strict";
-// ═════════════ Upiorna Noc Gier — rdzeń: pokoje (PeerJS), lobby, rejestr gier ═════════════
+// ═════════════ Upiorna Noc Gier — rdzeń: pokoje (serwer pokoi, js/net.js), lobby, rejestr gier ═════════════
 // Host trzyma cały stan pokoju i gry, goście wysyłają tylko akcje i dostają gotowy widok.
 
 const PREFIX = "upiornanoc-gmal-";
 const MAX_PLAYERS = 10;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const HOST_SAVE_MAX_AGE = 12 * 3600e3;
-// Do testów lokalnych: ?peer=9000 łączy z własnym serwerem PeerJS na localhost.
-const PEER_OPTS = (() => {
-  const port = location.hostname === "localhost" && new URLSearchParams(location.search).get("peer");
-  return port ? { host: "localhost", port: +port, path: "/", secure: false } : {};
-})();
-const mkPeer = id => (id ? new Peer(id, PEER_OPTS) : new Peer(PEER_OPTS));
+const mkPeer = id => (id ? new Peer(id) : new Peer());
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -468,8 +463,7 @@ function hostChanged() {
 }
 
 // ═════════════ Gość ═════════════
-// Połączenie z serwerem PeerJS jest jedno na całą wizytę – ponowne próby dołączenia używają go dalej,
-// żeby cała ekipa na jednym Wi-Fi nie wpadła w limit zapytań serwera.
+// Jeden obiekt połączenia na całą wizytę – ponowne próby dołączenia używają go dalej.
 let attemptSeq = 0;
 
 function guestPeer(cb) {
@@ -495,10 +489,11 @@ function joinRoom(opts = {}) {
   if (!opts.retry) { leaveAll(); S.screen = "connecting"; render(); }
 
   const my = ++attemptSeq;
-  let joined = false;
+  let joined = false, failed = false;
 
   const fail = text => {
-    if (my !== attemptSeq) return;
+    if (my !== attemptSeq || failed) return;
+    failed = true;
     clearTimeout(timeout);
     // Połączenie z serwerem, które się nie otworzyło, nie nadaje się do ponownego użycia.
     if (S.peer && !S.peer.open) { const p = S.peer; S.peer = null; try { p.destroy(); } catch {} }
