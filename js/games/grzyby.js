@@ -269,10 +269,7 @@
         <h3>Twój pionek</h3>
         <div class="me-row">
           ${avatar(me(), "xl")}
-          <div class="photo-btns">
-            <label class="btn orange small"><input type="file" accept="image/*" capture="user" data-photo hidden>📸 Selfie</label>
-            <label class="btn ghost small"><input type="file" accept="image/*" data-photo hidden>🖼️ Galeria</label>
-          </div>
+          ${photoButtons()}
         </div>
       </div>
       <div class="glass settings compact">
@@ -289,31 +286,88 @@
   }
 
   const seen = { roll: null, event: null };
+  // Animacja po stronie przeglądarki: pionki idą pole po polu do pozycji z serwera.
+  const STEP_MS = 190;
+  const anim = { shown: {}, round: null, timer: null, v: null, tip: null, tipTimer: null };
+  const DICE = { 1: [0, 0], 2: [0, -90], 3: [-90, 0], 4: [90, 0], 5: [0, 90], 6: [0, 180] };
+  const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+
+  const shownPos = (v, p) => (anim.shown[p] != null ? anim.shown[p] : v.pos[p] || 0);
+  function pawnXY(v, p, rows) {
+    const i = shownPos(v, p);
+    const k = v.seats.filter(q => q !== p && shownPos(v, q) === i && v.seats.indexOf(q) < v.seats.indexOf(p)).length;
+    const { r, c } = cellPos(i);
+    const dx = (k % 3) * 9 - 9, dy = Math.floor(k / 3) * 7;
+    return { left: `calc(${((c + 0.5) / COLS) * 100}% + ${dx}px)`, top: `calc(${((r + 0.62) / rows) * 100}% + ${dy}px)` };
+  }
+
+  function stepPawns() {
+    anim.timer = null;
+    const v = anim.v;
+    if (!v || v.phase === "setup") return;
+    const rows = Math.ceil(v.board.length / COLS);
+    let moving = false;
+    for (const p of v.seats) {
+      const t = v.pos[p] || 0, s = shownPos(v, p);
+      if (s === t) continue;
+      moving = true;
+      anim.shown[p] = s + Math.sign(t - s);
+      const el = document.querySelector(`[data-key="pw-${p}"]`);
+      if (el) {
+        const xy = pawnXY(v, p, rows);
+        el.style.left = xy.left; el.style.top = xy.top;
+        el.classList.remove("hop"); void el.offsetWidth; el.classList.add("hop");
+      }
+    }
+    if (moving) anim.timer = setTimeout(stepPawns, STEP_MS);
+    else window.render(); // koniec marszu – pokaż zdarzenie z pola i podświetl możliwe ruchy (render całej aplikacji)
+  }
+
+  DO.gmCell = el => {
+    anim.tip = +el.dataset.x;
+    clearTimeout(anim.tipTimer);
+    anim.tipTimer = setTimeout(() => { anim.tip = null; window.render(); }, 2600);
+    window.render();
+  };
+
+  function diceHTML(v, myTurn, fresh) {
+    const val = v.roll ? v.roll.val : 1;
+    const [rx, ry] = DICE[val];
+    const faces = [1, 2, 3, 4, 5, 6].map(n => `<div class="face f${n}">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => `<i class="${PIPS[n].includes(i) ? "on" : ""}"></i>`).join("")}</div>`).join("");
+    return `<button class="gm-dice3d ${fresh ? "roll" : ""} ${myTurn ? "ready" : ""} ${v.roll ? "" : "idle"}" ${myTurn ? 'data-act="roll" aria-label="Rzuć kostką"' : "disabled"}
+      data-key="dice${v.roll ? v.roll.n : 0}" style="--rx:${rx}deg;--ry:${ry}deg"><div class="cube">${faces}</div></button>`;
+  }
 
   function playHTML(v) {
     const meId = me();
     const myTurn = v.phase === "play" && v.turn === meId;
     const rows = Math.ceil(v.board.length / COLS);
+    if (anim.round !== v.round) { anim.round = v.round; anim.shown = {}; }
+    const walking = v.seats.some(p => anim.shown[p] != null && anim.shown[p] !== v.pos[p]);
+    const myPos = shownPos(v, meId);
+    const reach = myTurn && !walking ? new Set([1, 2, 3, 4, 5, 6].map(d => Math.min(v.board.length - 1, myPos + d))) : new Set();
+
     const cells = v.board.map((f, i) => {
       const { r, c } = cellPos(i);
-      return `<div class="gm-cell f-${f}" style="grid-row:${r + 1};grid-column:${c + 1}" title="${FIELDS[f].name}"><span>${FIELDS[f].icon}</span><i>${i || ""}</i></div>`;
+      const k = i - myPos;
+      return `<div class="gm-cell f-${f} ${reach.has(i) ? "reach" : ""} ${anim.tip === i ? "tipped" : ""}" style="grid-row:${r + 1};grid-column:${c + 1};--k:${k}"
+        data-do="gmCell" data-x="${i}"><span>${FIELDS[f].icon}</span><i>${i || ""}</i></div>`;
     }).join("");
-    // Pionki: kilka na jednym polu rozsuwa się lekko na boki.
-    const at = {};
     const pawns = v.seats.map(p => {
-      const i = v.pos[p] || 0;
-      const k = (at[i] = (at[i] || 0) + 1) - 1;
-      const { r, c } = cellPos(i);
-      const dx = (k % 3) * 9 - 9, dy = Math.floor(k / 3) * 9 - 4;
-      return `<div class="gm-pawn ${p === v.turn && v.phase === "play" ? "turn" : ""} ${p === meId ? "mine" : ""}" data-key="pw-${esc(p)}"
-        style="left:calc(${((c + 0.5) / COLS) * 100}% + ${dx}px);top:calc(${((r + 0.5) / rows) * 100}% + ${dy}px)">${avatar(p, "sm")}</div>`;
+      const xy = pawnXY(v, p, rows);
+      return `<div class="gm-pawn ${p === v.turn && v.phase === "play" && !walking ? "turn" : ""} ${p === meId ? "mine" : ""}" data-key="pw-${esc(p)}"
+        style="left:${xy.left};top:${xy.top}">${avatar(p, "sm")}<i class="base"></i></div>`;
     }).join("");
+    const tip = anim.tip != null && v.board[anim.tip] ? (() => { const f = FIELDS[v.board[anim.tip]];
+      return `<div class="gm-tip"><span>${f.icon}</span><div><b>${anim.tip ? `Pole ${anim.tip}: ` : ""}${f.name}</b><small>${f.desc || "Tu wszyscy zaczynają wyprawę."}</small></div></div>`; })() : "";
+    const flies = '<i class="ff"></i>'.repeat(9);
 
     const freshRoll = v.roll && seen.roll !== v.roll.n;
     seen.roll = v.roll ? v.roll.n : null;
     const ev = v.event;
-    const freshEv = ev && seen.event !== ev.n;
-    seen.event = ev ? ev.n : null;
+    const evWalking = ev && anim.shown[ev.pid] != null && anim.shown[ev.pid] !== v.pos[ev.pid];
+    const freshEv = ev && !evWalking && seen.event !== ev.n;
+    if (!evWalking) seen.event = ev ? ev.n : null;
 
     const chips = v.seats.slice().sort((a, b) => v.scores[b] - v.scores[a]).map((p, i) => `
       <div class="gm-chip ${p === v.turn && v.phase === "play" ? "turn" : ""}">
@@ -321,22 +375,23 @@
         ${i === 0 && v.scores[p] > 0 ? '<span class="lead">👑</span>' : ""}
       </div>`).join("");
 
-    const evHTML = ev ? `<div class="gm-event ${ev.type} ${freshEv ? "pop" : ""}" data-key="ev${ev.n}">
+    const evHTML = evWalking
+      ? `<div class="gm-event walking"><span class="ev-icon">🚶</span><p>${esc(pName(ev.pid))} idzie przez las…</p></div>`
+      : ev ? `<div class="gm-event ${ev.type} ${freshEv ? "pop" : ""}" data-key="ev${ev.n}">
         ${ev.card ? cardHTML(ev.card, "small") : `<span class="ev-icon">${{ move: "🦇", fog: "🌫️", again: "🎃", home: "🛖", witch: "🧙" }[ev.type] || "🍂"}</span>`}
         <p>${esc(ev.txt)}</p></div>` : `<div class="gm-event"><span class="ev-icon">🍂</span><p>Las czeka na pierwszy rzut…</p></div>`;
 
-    const dice = v.roll ? `<div class="gm-dice ${freshRoll ? "rolling" : ""}" data-key="d${v.roll.n}" data-val="${v.roll.val}">${"⚀⚁⚂⚃⚄⚅"[v.roll.val - 1]}</div>` : `<div class="gm-dice idle">🎲</div>`;
     const myBasket = (v.basket[meId] || []);
     const done = v.done.includes(meId);
 
     return `
     <section class="gm-table fit-screen ${myTurn ? "my-turn" : ""}">
       <div class="gm-chips" data-keep="gmchips">${chips}</div>
-      <div class="gm-boardwrap"><div class="gm-board" style="--rows:${rows};grid-template-rows:repeat(${rows},1fr)">${cells}<div class="gm-pawns">${pawns}</div></div></div>
+      <div class="gm-boardwrap"><div class="gm-board" style="--rows:${rows};grid-template-rows:repeat(${rows},1fr)">${cells}<div class="gm-pawns">${pawns}</div><div class="gm-flies">${flies}</div></div>${tip}</div>
       <div class="gm-panel glass">
-        <div class="gm-turn">${v.phase !== "play" ? "Koniec grzybobrania" : myTurn ? "Twoja kolej – rzucaj!" : `Rzuca: ${avatar(v.turn, "xs")} <b>${esc(pName(v.turn))}</b>`}</div>
-        <div class="gm-mid">${dice}${evHTML}</div>
-        ${myTurn ? `<button class="btn orange big gm-roll" data-act="roll">🎲 Rzuć kostką</button>` : ""}
+        <div class="gm-turn">${v.phase !== "play" ? "Koniec grzybobrania" : myTurn ? (walking ? "Idziesz…" : "Twoja kolej – dotknij kostki!") : `Rzuca: ${avatar(v.turn, "xs")} <b>${esc(pName(v.turn))}</b>`}</div>
+        <div class="gm-mid">${diceHTML(v, myTurn && !walking, freshRoll)}${evHTML}</div>
+        ${myTurn && !walking ? `<button class="btn orange big gm-roll" data-act="roll">🎲 Rzuć kostką</button>` : ""}
         ${v.seats.includes(meId) ? `<div class="gm-basket"><span class="bk-label">🧺${done ? ` 🛖${v.done.indexOf(meId) + 1}.` : ""}</span>
           <span class="bk-list">${myBasket.length ? myBasket.map(c => `<span class="bk" title="${MUSHROOMS[c.t].name}">${mushSVG(c.t, 24)}</span>`).join("") : '<em>koszyk pusty… na razie</em>'}</span>
           <b>${v.scores[meId] || 0} pkt</b></div>` : '<p class="hint">👀 Oglądasz tę wyprawę – dołączysz w następnej.</p>'}
@@ -371,6 +426,11 @@
   function effects(prev, v) {
     if (!v) return;
     const meId = me();
+    if (v.phase !== "setup") {
+      for (const p of v.seats) if (anim.shown[p] == null) anim.shown[p] = v.pos[p] || 0;
+      anim.v = v;
+      if (!anim.timer && v.seats.some(p => anim.shown[p] !== v.pos[p])) anim.timer = setTimeout(stepPawns, 350);
+    }
     if (v.phase === "play" && v.turn === meId && (!prev || prev.turn !== meId || (prev.roll && v.roll && prev.roll.n !== v.roll.n))) buzz(60);
     if (v.phase === "over" && (!prev || prev.phase !== "over")) buzz([80, 60, 120]);
     if (v.event && v.event.pid === meId && (!prev || !prev.event || prev.event.n !== v.event.n)) {

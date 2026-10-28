@@ -32,7 +32,7 @@ const gameById = id => GAMES.find(g => g.id === id);
 const S = {
   screen: "home", name: ls.get("hg-name", ""), joinCode: "", mode: null,
   peer: null, hostConn: null, conns: new Map(), code: null, view: null,
-  photos: {}, myPhoto: ls.get("hg-photo", null), lost: false, menu: false,
+  photos: {}, myPhoto: ss.get("hg-photo", null), lost: false, menu: false,
   lastSeen: 0, retryTimer: null, retries: 0,
 };
 let R = null; // stan pokoju – tylko u hosta
@@ -163,6 +163,7 @@ function lobbyHTML() {
   const list = players();
   return `
   <section class="lobby fit-screen"><div class="fit-inner">
+    <div class="glass"><div class="me-row">${avatar(me(), "xl")}<div class="me-info"><b>${esc(pName(me()))}</b><small>${S.photos[me()] ? "Twoje zdjęcie widzą wszyscy w pokoju" : "Dodaj zdjęcie – będzie na kartach i pionku"}</small>${photoButtons()}</div></div></div>
     <div class="glass code-card">
       <small>Kod pokoju – podaj znajomym</small>
       <div class="code-big">${[...v.code].map((c, i) => `<span style="--i:${i}">${esc(c)}</span>`).join("")}</div>
@@ -237,6 +238,7 @@ const DO = {
   },
   menu() { S.menu = !S.menu; render(); },
   rules() { S.rules = !S.rules; render(); },
+  photoDel() { deleteMyPhoto(); },
   noop() {},
   share() {
     const url = `${location.origin}${location.pathname}?k=${S.view.code}`;
@@ -279,7 +281,7 @@ async function onPhotoFile(file) {
   try {
     const data = await shrinkPhoto(file);
     S.myPhoto = data;
-    ls.set("hg-photo", data);
+    ss.set("hg-photo", data);
     sendMyPhoto();
     toast("Zdjęcie gotowe 📸");
   } catch (err) {
@@ -311,14 +313,33 @@ function shrinkPhoto(file) {
 }
 
 function sendMyPhoto() {
-  if (!S.myPhoto) return;
-  if (isHost()) setPhoto(me(), S.myPhoto);
-  else if (S.hostConn && S.hostConn.open) { try { S.hostConn.send({ t: "photo", data: S.myPhoto }); } catch {} }
+  if (isHost()) setPhoto(me(), S.myPhoto || null);
+  else if (S.hostConn && S.hostConn.open) { try { S.hostConn.send({ t: "photo", data: S.myPhoto || null }); } catch {} }
+}
+
+// Usunięcie własnego zdjęcia – znika u hosta i u wszystkich graczy.
+function deleteMyPhoto(quiet) {
+  const had = !!S.myPhoto || !!S.photos[me()];
+  S.myPhoto = null;
+  ss.del("hg-photo");
+  if (S.mode) sendMyPhoto();
+  if (had && !quiet) toast("Zdjęcie usunięte 🗑️");
+  render();
+}
+
+// Przyciski zdjęcia: zrób / wybierz / usuń (używane w lobby i na ekranach ustawień gier).
+function photoButtons() {
+  const has = !!S.photos[me()];
+  return `<div class="photo-btns">
+    <label class="btn orange small"><input type="file" accept="image/*" capture="user" data-photo hidden>📸 ${has ? "Nowe selfie" : "Selfie"}</label>
+    <label class="btn ghost small"><input type="file" accept="image/*" data-photo hidden>🖼️ Galeria</label>
+    ${has ? `<button class="btn ghost small del-photo" data-do="photoDel">🗑️ Usuń</button>` : ""}
+  </div>`;
 }
 
 // ═════════════ Host ═════════════
 const genCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
-const hostSave = () => { const s = ls.get("hg-host", null); return s && Date.now() - s.ts < HOST_SAVE_MAX_AGE ? s : null; };
+const hostSave = () => { const s = ss.get("hg-host", null); return s && Date.now() - s.ts < HOST_SAVE_MAX_AGE ? s : null; };
 
 function createRoom(restore, attempt = 0) {
   const name = S.name.trim();
@@ -421,6 +442,8 @@ function guestGone(conn) {
   S.conns.delete(pid);
   const p = R.players.find(x => x.id === pid);
   if (p) p.online = false;
+  // Kto nie wróci w ciągu 2 minut (zamknięta karta), traci zdjęcie u wszystkich.
+  setTimeout(() => { const q = R && R.players.find(x => x.id === pid); if (q && !q.online && S.photos[pid]) setPhoto(pid, null); }, 120000);
   hostChanged();
 }
 
@@ -430,15 +453,16 @@ function removePlayer(pid) {
   S.conns.delete(pid);
   if (c) { c._pid = null; setTimeout(() => { try { c.close(); } catch {} }, 300); }
   R.players = R.players.filter(p => p.id !== pid);
-  delete S.photos[pid];
+  if (S.photos[pid]) setPhoto(pid, null);
   const g = R.phase === "game" && gameById(R.gameId);
   if (g && g.playerLeft) g.playerLeft(R.gs, pid, R);
   hostChanged();
 }
 
 function setPhoto(pid, data) {
-  if (typeof data !== "string" || !/^data:image\/(jpeg|png|webp);base64,/.test(data) || data.length > 250000) return;
-  S.photos[pid] = data;
+  if (data === null) { if (!S.photos[pid]) return; delete S.photos[pid]; }
+  else if (typeof data !== "string" || !/^data:image\/(jpeg|png|webp);base64,/.test(data) || data.length > 250000) return;
+  else S.photos[pid] = data;
   for (const [id, c] of S.conns) if (id !== pid && c.open) { try { c.send({ t: "photo", id: pid, data }); } catch {} }
   if (pid !== me()) { const c = S.conns.get(pid); if (c && c.open) try { c.send({ t: "photo", id: pid, data }); } catch {} }
   hostChanged();
@@ -490,7 +514,7 @@ function hostChanged() {
   for (const [pid, c] of S.conns) if (c.open) { try { c.send({ t: "state", view: viewFor(pid) }); } catch {} }
   applyView(viewFor(me()));
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { if (R) ls.set("hg-host", { code: R.code, R, photos: S.photos, ts: Date.now() }); }, 400);
+  saveTimer = setTimeout(() => { if (R) ss.set("hg-host", { code: R.code, R, photos: S.photos, ts: Date.now() }); }, 400);
 }
 
 // ═════════════ Gość ═════════════
@@ -561,11 +585,11 @@ function joinRoom(opts = {}) {
           clearTimeout(timeout);
           S.mode = "guest"; S.code = code; S.screen = "room"; S.lost = false; S.retries = 0;
           ss.set("hg-role", { role: "guest", code, name });
-          if (S.myPhoto && !S.photos[ME]) sendMyPhoto();
+          if (S.myPhoto && S.photos[ME] !== S.myPhoto) sendMyPhoto();
         }
         applyView(msg.view);
       } else if (msg.t === "photo") {
-        S.photos[msg.id] = msg.data;
+        if (msg.data) S.photos[msg.id] = msg.data; else delete S.photos[msg.id];
         render();
       } else if (msg.t === "reject") {
         opts.retry = opts.auto = false;
@@ -640,8 +664,11 @@ function leaveAll() {
 }
 
 function goHome() {
-  if (S.mode === "host") ls.del("hg-host");
+  if (S.mode === "host") ss.del("hg-host");
   ss.del("hg-role");
+  // Wyjście z pokoju kasuje zdjęcie (u siebie i – przez „leave” – u hosta i innych).
+  S.myPhoto = null;
+  ss.del("hg-photo");
   leaveAll();
   S.screen = "home";
   history.replaceState(null, "", location.pathname);
@@ -649,6 +676,9 @@ function goHome() {
 }
 
 function init() {
+  // Starsze wersje trzymały zdjęcie i pokój na stałe w przeglądarce – sprzątamy.
+  ls.del("hg-photo");
+  ls.del("hg-host");
   const k = new URLSearchParams(location.search).get("k");
   if (k) S.joinCode = k.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
   render();

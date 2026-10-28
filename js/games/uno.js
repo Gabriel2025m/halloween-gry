@@ -337,10 +337,7 @@
       <div class="glass">
         <div class="me-row">
           ${avatar(me(), "xl")}
-          <div class="photo-btns">
-            <label class="btn orange small"><input type="file" accept="image/*" capture="user" data-photo hidden>📸 Selfie</label>
-            <label class="btn ghost small"><input type="file" accept="image/*" data-photo hidden>🖼️ Galeria</label>
-          </div>
+          ${photoButtons()}
           ${mine != null ? cardHTML({ k: mine, v: 7 }) : ""}
         </div>
       </div>
