@@ -44,6 +44,7 @@
       colors: prev ? prev.colors : {},
       seats: [], hands: {}, deck: [], discard: [], turn: 0, pending: 0, drew: null,
       uno: {}, vuln: null, log: [], winner: null, ranking: null, shout: null, last: null, seq: 1,
+      finished: [], done: null, loser: null,
     };
   }
 
@@ -85,7 +86,7 @@
       }
     }
     shuffle(deck);
-    Object.assign(st, { seats, deck, hands: {}, discard: [], pending: 0, drew: null, uno: {}, vuln: null, log: [], winner: null, ranking: null, shout: null, last: null });
+    Object.assign(st, { seats, deck, hands: {}, discard: [], pending: 0, drew: null, uno: {}, vuln: null, log: [], winner: null, ranking: null, shout: null, last: null, finished: [], done: null, loser: null });
     for (const pid of seats) st.hands[pid] = deck.splice(0, st.opts.hand);
     let first = deck.pop();
     while (first.v === P3) { deck.unshift(first); first = deck.pop(); }
@@ -96,11 +97,25 @@
     log(st, `🃏 Rozdano po ${st.opts.hand} kart. Zaczyna ${nameIn(room, cur(st))}!`);
   }
 
-  function finish(st, pid, room) {
-    st.winner = pid;
+  const medal = place => ["🥇", "🥈", "🥉"][place - 1] || "🏅";
+
+  // Gracz bez kart schodzi ze stołu, kolejka przesuwa się bez niego.
+  function leaveSeats(st, pid) {
+    const i = st.seats.indexOf(pid);
+    if (i < 0) return;
+    st.seats.splice(i, 1);
+    if (i < st.turn) st.turn--;
+    if (st.turn >= st.seats.length) st.turn = 0;
+  }
+
+  // Runda trwa, dopóki przy stole zostanie jedna osoba – ona przegrywa.
+  function endGame(st, room) {
+    const rest = st.seats.map(p => ({ pid: p, n: (st.hands[p] || []).length })).sort((a, b) => a.n - b.n);
+    st.ranking = st.finished.map(p => ({ pid: p, n: 0 })).concat(rest);
+    st.winner = st.finished[0] || (rest[0] && rest[0].pid) || null;
+    st.loser = rest.length ? rest[rest.length - 1].pid : null;
     st.phase = "over";
-    st.ranking = st.seats.map(p => ({ pid: p, n: st.hands[p].length })).sort((a, b) => a.n - b.n);
-    log(st, `🏆 ${nameIn(room, pid)} wygrywa!`, "win");
+    if (st.loser && st.finished.length) log(st, `👻 ${nameIn(room, st.loser)} zostaje z kartami!`, "win");
   }
 
   function play(st, pid, cardId, room) {
@@ -119,8 +134,12 @@
     st.last = { n: st.seq, by: pid };
     const nm = nameIn(room, pid);
     log(st, `${nm} kładzie ${label(card)}${pair ? " 💞 (para)" : ""}`, "play");
-    if (hand.length === 0) return finish(st, pid, room);
-    if (hand.length === 1) { if (!st.uno[pid]) st.vuln = pid; } else st.uno[pid] = false;
+    const out = hand.length === 0;
+    if (out) {
+      st.finished.push(pid);
+      st.done = { pid, place: st.finished.length, n: st.seq };
+      log(st, `${medal(st.finished.length)} ${nm} kończy na ${st.finished.length}. miejscu!`, "win");
+    } else if (hand.length === 1) { if (!st.uno[pid]) st.vuln = pid; } else st.uno[pid] = false;
     if (card.v === P3) {
       if (st.opts.stack) {
         st.pending += 3;
@@ -134,6 +153,10 @@
         advance(st);
       }
     } else advance(st);
+    if (out) {
+      leaveSeats(st, pid);
+      if (st.seats.length < 2) endGame(st, room);
+    }
   }
 
   function draw(st, pid, room) {
@@ -250,7 +273,7 @@
     if (wasTurn) { st.drew = null; }
     if (st.vuln === pid) st.vuln = null;
     log(st, `👋 ${nameIn(room, pid)} opuszcza grę`);
-    if (st.seats.length < 2) finish(st, st.seats[0], room);
+    if (st.seats.length < 2) endGame(st, room);
   }
 
   function view(st, pid) {
@@ -265,6 +288,7 @@
       deck: st.deck.length, turn: cur(st), pending: st.pending,
       drew: pid === cur(st) ? st.drew : null,
       uno: st.uno, vuln: st.vuln, log: st.log.slice(-5), winner: st.winner, ranking: st.ranking,
+      finished: st.finished || [], done: st.done, loser: st.loser,
       shout: st.shout, last: st.last, round: st.round,
     };
   }
@@ -349,7 +373,7 @@
             <li><b>+3</b> – następna osoba dobiera 3 karty i traci turę${v.opts.stack ? " (chyba że przebije własną +3)" : ""}.</li>
             <li>Nie masz co położyć? Dobierz kartę – jeśli pasuje, możesz ją od razu zagrać.</li>
             <li>Przy przedostatniej karcie krzycz <b>UNO!</b> – kto się zapomni, może zostać złapany (+2).</li>
-            <li>Wygrywa ten, kto pierwszy pozbędzie się wszystkich kart.</li>
+            <li>Kto pozbędzie się kart, zajmuje miejsce (🥇, 🥈, 🥉…), a reszta gra dalej – aż zostanie jedna osoba z kartami 👻.</li>
           </ul>
         </details>
         ${host ? `<button class="btn orange big" data-act="start" ${ready.length < 2 ? "disabled" : ""}>🎃 Rozdaj karty</button>
@@ -396,6 +420,10 @@
       </div>`;
     };
 
+    const fin = v.finished || [];
+    const myPlace = fin.indexOf(meId) + 1;
+    const podium = fin.length ? `<div class="podium">${fin.map((p, i) => `<span class="pod">${medal(i + 1)}${avatar(p, "xs")}<b>${esc(pName(p))}</b></span>`).join("")}</div>` : "";
+
     const pairTags = v.opts.pairs ? v.pairs.filter(([a, b]) => a && b && player(a) && player(b))
       .map(([a, b]) => `<span class="pair-tag">${avatar(a, "xs")}💞${avatar(b, "xs")}</span>`).join("") : "";
 
@@ -418,6 +446,7 @@
       <div class="opps" data-keep="opps">${opps.map(opChip).join("") || '<p class="hint">Brak przeciwników</p>'}</div>
 
       <div class="tablecloth">
+        ${podium}
         <div class="turn-banner ${myTurn ? "mine" : ""}">${turnTxt}</div>
         <div class="piles">
           <button class="deck" data-act="draw" ${myTurn && v.drew == null ? "" : "disabled"} aria-label="Dobierz kartę">
@@ -438,7 +467,8 @@
       </div>
 
       <div class="me-area">
-        ${hand ? `
+        ${myPlace ? `<div class="finished-me"><span class="fm-medal">${medal(myPlace)}</span><div><b>${myPlace}. miejsce!</b><small>Nie masz już kart – patrz, kto zostanie z nimi do końca 👻</small></div></div>`
+        : hand ? `
           <div class="actions">${actions}</div>
           <div class="hand ${myTurn ? "active" : ""} ${hand.length > 10 ? "many" : ""}" data-keep="hand">
             ${hand.map((c, i) => {
@@ -460,7 +490,11 @@
       <div class="crown">👑</div>
       ${avatar(w, "xxl")}
       <h2 class="spooky">${esc(pName(w))}<br><span>wygrywa!</span></h2>
-      <ol class="ranking">${(v.ranking || []).map((r, i) => `<li>${["🥇", "🥈", "🥉"][i] || `${i + 1}.`} ${avatar(r.pid, "xs")} <span>${esc(pName(r.pid))}</span><b>${r.n ? `${r.n} ${cardsWord(r.n)}` : "0 🎉"}</b></li>`).join("")}</ol>
+      ${v.loser && v.loser !== w ? `<p class="loser">👻 <b>${esc(pName(v.loser))}</b> zostaje z kartami</p>` : ""}
+      <ol class="ranking">${(v.ranking || []).map((r, i) => {
+        const last = r.pid === v.loser && r.pid !== w;
+        return `<li class="${last ? "last" : ""}">${last ? "👻" : medal(i + 1)} <i class="place">${i + 1}.</i> ${avatar(r.pid, "xs")} <span>${esc(pName(r.pid))}</span><b>${r.n ? `${r.n} ${cardsWord(r.n)}` : "🎉"}</b></li>`;
+      }).join("")}</ol>
       ${isHost() ? `<div class="over-btns"><button class="btn orange" data-act="start">🔁 Rewanż</button><button class="btn ghost" data-act="setup">⚙️ Zmień zasady</button><button class="btn ghost small" data-act="room.lobby">🏚️ Lobby</button></div>`
         : `<p class="hint wait">⏳ Host zdecyduje, co dalej…</p>`}
     </div></div>`;
@@ -484,6 +518,7 @@
     const meId = me();
     if (v.phase === "play" && v.turn === meId && (!prev || prev.turn !== meId || prev.phase !== "play")) buzz(60);
     if (v.shout && (!prev || !prev.shout || prev.shout.n !== v.shout.n)) shoutFX(v.shout.pid);
+    if (v.done && v.phase === "play" && (!prev || !prev.done || prev.done.n !== v.done.n)) finishFX(v.done.pid, v.done.place);
     if (v.phase === "over" && (!prev || prev.phase !== "over")) { candyFX(); buzz([80, 60, 120]); }
     const lastLog = v.log[v.log.length - 1];
     if (prev && lastLog && lastLog.kind === "hit" && (!prev.log.length || prev.log[prev.log.length - 1].n !== lastLog.n)) {
@@ -501,6 +536,16 @@
     fx.appendChild(el);
     buzz(120);
     setTimeout(() => el.remove(), 1800);
+  }
+
+  function finishFX(pid, place) {
+    const fx = document.getElementById("fx");
+    const el = document.createElement("div");
+    el.className = "shout fin";
+    el.innerHTML = `${avatar(pid, "xl")}<b>${medal(place)} ${place}.</b><small>${esc(pName(pid))} kończy!</small>`;
+    fx.appendChild(el);
+    if (pid === me()) { candyFX(); buzz([60, 40, 60]); }
+    setTimeout(() => el.remove(), 2200);
   }
 
   function candyFX() {

@@ -400,6 +400,18 @@ body[data-screen="game-uno"] .sky .bat { opacity: .35; }
 .tablecloth::before { /* pajęczyna w rogu */
   content: "🕸️"; position: absolute; top: -4px; left: 4px; font-size: 26px; opacity: .45;
 }
+.podium { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 8px; }
+.pod { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 6px; border-radius: 99px; background: rgba(255, 210, 63, .12); border: 1px solid rgba(255, 210, 63, .35); font-size: .78rem; animation: rise .4s ease both; }
+.pod b { font-weight: 800; }
+.finished-me { display: flex; align-items: center; gap: 12px; margin: 6px auto 4px; max-width: 360px; padding: 14px 16px; border-radius: 18px; background: linear-gradient(135deg, rgba(255, 210, 63, .18), rgba(255, 122, 26, .12)); border: 1px solid rgba(255, 210, 63, .4); animation: rise .5s ease both; }
+.fm-medal { font-size: 2.6rem; filter: drop-shadow(0 0 12px rgba(255, 210, 63, .7)); }
+.finished-me b { display: block; font-size: 1.2rem; color: #ffd23f; }
+.finished-me small { color: var(--muted); }
+.loser { margin: -2px 0 2px; color: var(--muted); }
+.loser b { color: #c9a2ff; }
+.ranking .place { font-style: normal; color: var(--dim); font-weight: 700; font-size: .8rem; }
+.ranking li.last { background: rgba(155, 92, 255, .14); }
+.shout.fin b { color: #ffd23f; font-size: 4.6rem; text-shadow: 0 0 40px rgba(255, 210, 63, .8), 0 6px 0 #1a0716; }
 .turn-banner { text-align: center; font-weight: 800; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; }
 .turn-banner.mine { color: var(--orange); font-size: 1.15rem; text-shadow: 0 0 12px rgba(255, 122, 26, .6); animation: pulse 1.6s ease-in-out infinite; }
 .piles { display: flex; align-items: center; justify-content: center; gap: 34px; padding: 10px 0 6px; }
